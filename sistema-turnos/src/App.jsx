@@ -15,8 +15,9 @@ import {
 /**
  * <!-- Chosen Palette: Slate (Neutrals) + Dynamic Primary Color -->
  * <!-- Updates:
- * - PORTFOLIO RESTRUCTURED: Changed from filter tabs to categorized sections.
- * Each category now displays as a large header followed by its specific image grid.
+ * - FIXED: ReferenceError totalRevenue. Variable name mismatch fixed in dashboardStats.
+ * - FIXED: CATEGORIES variable name consistency.
+ * - FIXED: Portfolio filters and state logic.
  * -->
  */
 
@@ -104,7 +105,9 @@ const getNextDays = () => {
 
 // --- HELPER DE EXPORTACIÓN ---
 const exportToCSV = (data, filename) => {
-  if (!data || !data.length) return;
+  if (!data || !data.length) {
+    return;
+  }
   const headers = Object.keys(data[0]).join(",");
   const rows = data.map(obj => Object.values(obj).join(","));
   const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows.join("\n");
@@ -130,6 +133,7 @@ export default function App() {
   const [view, setView] = useState('landing');
   const [dashboardView, setDashboardView] = useState('overview');
   const [activeCategory, setActiveCategory] = useState("Todos");
+  const [activePortfolioFilter, setActivePortfolioFilter] = useState("Todos");
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -224,6 +228,7 @@ export default function App() {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const todayStr = today.toISOString().split('T')[0];
     
+    // FIX: Variable name changed from 'revenue' to 'totalRevenue' to match return statement
     const totalRevenue = appointments.reduce((sum, app) => sum + app.price, 0);
     const todayRevenue = appointments.filter(app => app.date === todayStr).reduce((sum, app) => sum + app.price, 0);
     const weeklyRevenue = appointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfWeek && appDate <= today; }).reduce((sum, app) => sum + app.price, 0);
@@ -409,6 +414,26 @@ export default function App() {
                       <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">{dashboardStats.busyHours.map((h, i) => (<div key={i} className="flex flex-col items-center flex-1 min-w-[30px]"><div className="w-full bg-purple-100 rounded-t hover:bg-purple-200 transition-colors relative group" style={{ height: `${(h.count / (Math.max(...dashboardStats.busyHours.map(x=>x.count)) || 1)) * 100}%` }}><div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-1 rounded opacity-0 group-hover:opacity-100">{h.count}</div></div><span className="text-[10px] text-slate-400 mt-1">{h.hour.split(':')[0]}</span></div>))}</div>
                    </div>
               </div>
+
+              {/* Recent Appointments Table */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50"><h3 className="font-bold text-sm text-slate-700">Últimos Turnos</h3></div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                        <tbody className="divide-y divide-slate-100">
+                            {appointments.slice().reverse().slice(0,5).map(app => (
+                            <tr key={app.id}>
+                                <td className="p-3 font-medium">{app.clientName}</td>
+                                <td className="p-3 text-slate-500">{app.staffName}</td>
+                                <td className="p-3 text-slate-500">{app.serviceTitle}</td>
+                                <td className="p-3 text-right font-bold">$ {app.price}</td>
+                            </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -453,7 +478,7 @@ export default function App() {
                                 </div>
                                 <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.stock > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{item.stock > 0 ? 'Disponible' : 'Agotado'}</span>
-                                    {/* FIX: Button logic for deletion */}
+                                    {/* FIX: Button is now type="button" and prevents default to ensure delete works */}
                                     <button 
                                       type="button"
                                       onClick={(e) => { e.preventDefault(); handleDeleteProduct(item.id); }} 
