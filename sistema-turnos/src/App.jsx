@@ -595,7 +595,7 @@ export default function App() {
       </nav>
 
       <header id="top" className="relative pt-40 pb-24 md:pt-52 md:pb-40 overflow-hidden bg-slate-900">
-        <div className="absolute inset-0 z-0"><img src="https://i.postimg.cc/FzcxP9qW/782cafe1-5812-40e3-9862-2b27b89dd969.png" alt="Barber" className="w-full h-full object-cover opacity-90" /><div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/40 to-blue-900/30"></div></div>
+        <div className="absolute inset-0 z-0"><img src="https://i.postimg.cc/FzcxP9qW/782cafe1-5812-40e3-9862-2b27b89dd969.png" alt="Barber" className="w-full h-full object-cover opacity-90" /><div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-900/30 to-blue-900/30"></div></div>
         <div className="container mx-auto px-4 md:px-8 relative z-10 text-center md:text-left">
           <div className="max-w-3xl">
             <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-6 leading-[1.1]">Tu estilo, <br/><span className={config.primaryColor === 'blue' ? 'text-blue-400' : config.primaryColor === 'indigo' ? 'text-indigo-400' : config.primaryColor === 'purple' ? 'text-purple-400' : 'text-rose-400'}>tu momento.</span></h1>
