@@ -156,6 +156,18 @@ export default function App() {
   const [newCatName, setNewCatName] = useState(""); 
 
   const reviewsRef = useRef(null);
+    const SHOP_ID = 'default';
+
+  const [fbUser, setFbUser] = useState(null);
+  const isAdmin = !!fbUser;
+
+  // Evita loop: snapshot -> setState -> save -> snapshot
+  const lastRemoteRef = useRef('');
+  useEffect(() => {
+    if (!firebaseEnabled) return;
+    return onAuthStateChanged(auth, (user) => setFbUser(user));
+  }, []);
+
 
   // --- SCROLL SUAVE ---
   const handleNavClick = (e, targetId) => {
@@ -175,6 +187,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!firebaseEnabled) {
     const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
     const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
     const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
@@ -188,6 +201,102 @@ export default function App() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+    useEffect(() => {
+    if (!firebaseEnabled) return;
+
+    const shopRef = doc(db, 'shops', SHOP_ID);
+
+    return onSnapshot(shopRef, async (snap) => {
+      // Si no existe el doc aún, lo crea el admin automáticamente
+      if (!snap.exists()) {
+        if (isAdmin) {
+          const payload = {
+            config,
+            staffData,
+            servicesData,
+            reviewsData,
+            portfolioData,
+            productsData,
+            portfolioCategories,
+          };
+          await setDoc(shopRef, payload, { merge: true });
+          lastRemoteRef.current = JSON.stringify(payload);
+        }
+        return;
+      }
+
+      const data = snap.data();
+
+      const payload = {
+        config: data.config ?? config,
+        staffData: data.staffData ?? staffData,
+        servicesData: data.servicesData ?? servicesData,
+        reviewsData: data.reviewsData ?? reviewsData,
+        portfolioData: data.portfolioData ?? portfolioData,
+        productsData: data.productsData ?? productsData,
+        portfolioCategories: data.portfolioCategories ?? portfolioCategories,
+      };
+
+      lastRemoteRef.current = JSON.stringify({
+        config: payload.config,
+        staffData: payload.staffData,
+        servicesData: payload.servicesData,
+        reviewsData: payload.reviewsData,
+        portfolioData: payload.portfolioData,
+        productsData: payload.productsData,
+        portfolioCategories: payload.portfolioCategories,
+      });
+
+      setConfig(payload.config);
+      setStaffData(payload.staffData);
+      setServicesData(payload.servicesData);
+      setReviewsData(payload.reviewsData);
+      setPortfolioData(payload.portfolioData);
+      setProductsData(payload.productsData);
+      setPortfolioCategories(payload.portfolioCategories);
+    });
+  }, [isAdmin]);
+  useEffect(() => {
+    if (!firebaseEnabled || !isAdmin) return;
+
+    const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
+    const q = query(appsRef, orderBy('createdAtTS', 'desc'));
+
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => {
+        const { createdAtTS, ...rest } = d.data();
+        return { id: d.id, ...rest };
+      });
+      setAppointments(list);
+    });
+  }, [isAdmin]);
+    useEffect(() => {
+    if (!firebaseEnabled || !isAdmin) return;
+
+    const payload = {
+      config,
+      staffData,
+      servicesData,
+      reviewsData,
+      portfolioData,
+      productsData,
+      portfolioCategories,
+    };
+
+    const next = JSON.stringify(payload);
+    if (lastRemoteRef.current === next) return;
+
+    const shopRef = doc(db, 'shops', SHOP_ID);
+
+    const t = setTimeout(async () => {
+      await setDoc(shopRef, payload, { merge: true });
+      lastRemoteRef.current = next;
+    }, 600);
+
+    return () => clearTimeout(t);
+  }, [isAdmin, config, staffData, servicesData, reviewsData, portfolioData, productsData, portfolioCategories]);
+
+
 
   useEffect(() => { localStorage.setItem('appointments', JSON.stringify(appointments)); }, [appointments]);
   useEffect(() => { localStorage.setItem('appConfig', JSON.stringify(config)); }, [config]);
@@ -268,10 +377,37 @@ export default function App() {
     return { totalRevenue, todayRevenue, weeklyRevenue, monthlyRevenue, totalAppointments: appointments.length, dailyAppointments, weeklyAppointments, monthlyAppointments, staffDailyCounts, staffPerformance, salesComparison, topServices, busyHours, nextApp: futureApps[0] || null };
   }, [appointments, staffData, config.primaryColor]);
 
-  const handleLogin = (e) => {
+    const handleLogin = async (e) => {
     e.preventDefault();
-    if (loginData.email === 'admin@sistema.com' && loginData.password === 'admin123') { setView('dashboard'); setLoginError(''); } else { setLoginError('Credenciales incorrectas (Prueba: admin@sistema.com / admin123)'); }
+
+    // Fallback: si Firebase no está configurado, conserva tu login actual
+    if (!firebaseEnabled) {
+      if (loginData.email === 'admin@sistema.com' && loginData.password === 'admin123') {
+        setView('dashboard');
+        setLoginError('');
+      } else {
+        setLoginError('Credenciales incorrectas (Prueba: admin@sistema.com / admin123)');
+      }
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, loginData.email, loginData.password);
+      setLoginError('');
+      setView('dashboard');
+    } catch (err) {
+      setLoginError('Credenciales incorrectas');
+    }
   };
+
+  const handleLogout = async () => {
+    try {
+      if (firebaseEnabled) await signOut(auth);
+    } finally {
+      setView('landing');
+    }
+  };
+
 
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
