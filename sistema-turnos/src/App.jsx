@@ -11,6 +11,13 @@ import {
   Link as LinkIcon, ShoppingBag, Tag, FileSpreadsheet, XCircle,
   Activity, PieChart, BarChart2
 } from 'lucide-react';
+import { auth, db, firebaseEnabled } from './firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {
+  doc, setDoc, onSnapshot,
+  collection, addDoc, query, orderBy, serverTimestamp
+} from 'firebase/firestore';
+
 
 /**
  * <!-- Chosen Palette: Slate (Neutrals) + Dynamic Primary Color -->
