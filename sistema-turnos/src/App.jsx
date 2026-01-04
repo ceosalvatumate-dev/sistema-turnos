@@ -30,19 +30,11 @@ import {
 
 
 /**
- * <!-- Chosen Palette: Slate (Neutrals) + Dynamic Primary Color -->
- * <!-- Updates:
- * - PORTFOLIO RESTRUCTURED: Changed from filter tabs to categorized sections.
- * Each category now displays as a large header followed by its specific image grid.
- * -->
- */
+ * * */
 
 // --- DATOS INICIALES ---
 
-
 // --- HORARIOS DE TRABAJO (POR PROFESIONAL) ---
-// Estructura:
-// schedule: { mon:{enabled,start,end}, tue:{...}, ... }  (horario en formato 'HH:MM')
 const WEEK_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const WEEK_LABELS = { sun: 'Dom', mon: 'Lun', tue: 'Mar', wed: 'Mié', thu: 'Jue', fri: 'Vie', sat: 'Sáb' };
 
@@ -59,7 +51,6 @@ const makeDefaultSchedule = () => ({
 const ensureStaffSchedule = (staffObj) => {
   const base = staffObj || {};
   const schedule = base.schedule && typeof base.schedule === 'object' ? base.schedule : makeDefaultSchedule();
-  // Normaliza keys y valores
   const normalized = { ...makeDefaultSchedule(), ...schedule };
   WEEK_KEYS.forEach((k) => {
     if (!normalized[k]) normalized[k] = makeDefaultSchedule()[k];
@@ -71,8 +62,6 @@ const ensureStaffSchedule = (staffObj) => {
   return { ...base, schedule: normalized };
 };
 
-
-// --- Robust parsing & normalization (prevents blank screen if remote/local data is missing keys) ---
 const safeParseJSON = (str, fallback = null) => {
   try { return JSON.parse(str); } catch { return fallback; }
 };
@@ -111,12 +100,6 @@ const timeToMinutes = (t) => {
   return (h * 60) + (m || 0);
 };
 
-const minutesToTime = (mins) => {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
-
 const INITIAL_CONFIG = {
   businessName: "Barbería Premium",
   logoUrl: "", 
@@ -132,7 +115,6 @@ const INITIAL_STAFF = [
   { id: 2, name: "Ana Gomez", role: "Estilista Senior", image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop", pin: "2222", schedule: makeDefaultSchedule() },
   { id: 3, name: "Carlos Ruiz", role: "Barbero", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop", pin: "3333", schedule: makeDefaultSchedule() }
 ];
-
 
 const INITIAL_PRODUCTS = [
   { id: 1, product: "Cera Mate Strong", price: 2500, stock: 15, unit: "unidades", image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=500" },
@@ -259,10 +241,22 @@ export default function App() {
   const [fbUser, setFbUser] = useState(null);
   const isAdmin = !!fbUser;
 
-  // Evita loop: snapshot -> setState -> save -> snapshot
   const lastRemoteRef = useRef('');
   const shopHydratedRef = useRef(false);
   const busyMigratedRef = useRef(false);
+
+  // --- DERIVED STATE (MISSING IN ORIGINAL CODE) ---
+  const filteredServices = useMemo(() => {
+    return servicesData.filter((service) => {
+      if (activeCategory === "Todos") return true;
+      if (Array.isArray(service.category)) {
+        return service.category.some(c => c.includes(activeCategory) || c === activeCategory);
+      }
+      return service.category === activeCategory;
+    });
+  }, [servicesData, activeCategory]);
+
+  const weekDays = useMemo(() => getNextDays(), []);
 
   useEffect(() => {
     if (!firebaseEnabled) return;
@@ -287,15 +281,13 @@ export default function App() {
     }
   };
 
-  // ✅ FIX 1: Scroll listener SIEMPRE (con o sin Firebase)
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
-    handleScroll(); // inicializa al cargar
+    handleScroll(); 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // ✅ FIX 2: Cargar localStorage SOLO si Firebase NO está activo
   useEffect(() => {
     if (firebaseEnabled) return;
 
@@ -317,7 +309,6 @@ export default function App() {
     return onSnapshot(shopRef, async (snap) => {
       shopHydratedRef.current = true;
 
-      // Si no existe el doc aún, lo crea el admin automáticamente
       if (!snap.exists()) {
         if (isAdmin) {
           const payload = {
@@ -369,8 +360,6 @@ export default function App() {
 
   useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
-
-    // Evita sobrescribir el doc remoto con valores iniciales antes de hidratar desde Firestore
     if (!shopHydratedRef.current) return;
 
     const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
@@ -383,7 +372,6 @@ export default function App() {
       });
       setAppointments(list);
 
-        // Migra/crea busy docs una sola vez (para bloquear horarios de citas existentes)
         if (!busyMigratedRef.current) {
           busyMigratedRef.current = true;
           syncBusyDocsFromAppointments(list).catch(() => {});
@@ -392,25 +380,22 @@ export default function App() {
   }, [isAdmin]);
 
 
-// Citas para profesionales (solo su agenda). Mantiene privacidad: se filtra localmente por staffId.
-useEffect(() => {
-  if (!firebaseEnabled || !staffUser) return;
+  useEffect(() => {
+    if (!firebaseEnabled || !staffUser) return;
+    const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
+    const q = query(appsRef, orderBy('createdAtTS', 'desc'));
 
-  const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
-  const q = query(appsRef, orderBy('createdAtTS', 'desc'));
-
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => {
-      const { createdAtTS, ...rest } = d.data();
-      return { id: d.id, ...rest };
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => {
+        const { createdAtTS, ...rest } = d.data();
+        return { id: d.id, ...rest };
+      });
+      setStaffAppointments(list);
     });
-    setStaffAppointments(list);
-  });
-}, [staffUser?.id]);
+  }, [staffUser?.id]);
+
   useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
-
-    // Evita sobrescribir el doc remoto con valores iniciales antes de hidratar desde Firestore
     if (!shopHydratedRef.current) return;
 
     const payload = {
@@ -437,7 +422,6 @@ useEffect(() => {
   }, [isAdmin, config, staffData, servicesData, reviewsData, portfolioData, productsData, portfolioCategories]);
 
 
-  // ✅ FIX 3: Guardar localStorage SOLO si Firebase NO está activo
   useEffect(() => { 
     if (firebaseEnabled) return;
     localStorage.setItem('appointments', JSON.stringify(appointments)); 
@@ -552,7 +536,6 @@ useEffect(() => {
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    // Fallback: si Firebase no está configurado, conserva tu login actual
     if (!firebaseEnabled) {
       if (loginData.email === 'admin@sistema.com' && loginData.password === 'admin123') {
         setView('dashboard');
@@ -597,7 +580,6 @@ const handleCancelAppointment = async (app) => {
       const busyData = busySnap.exists() ? busySnap.data() : {};
       const slots = { ...(busyData.slots || {}) };
 
-      // Marcar slot como cancelado (libera el horario)
       slots[app.time] = {
         ...(slots[app.time] || {}),
         status: 'Cancelado',
@@ -613,7 +595,6 @@ const handleCancelAppointment = async (app) => {
       tx.update(appRef, { status: 'Cancelado', updatedAtTS: serverTimestamp() });
     });
   } catch (e) {
-    // En caso de error, al menos cambia el estado local
     setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Cancelado' } : x)));
   }
 };
@@ -656,7 +637,6 @@ const syncBusyDocsFromAppointments = async (list) => {
   if (!firebaseEnabled) return;
   if (!Array.isArray(list) || list.length === 0) return;
 
-  // Solo sincroniza citas NO canceladas
   const active = list.filter((a) => (a.status || 'Confirmado') !== 'Cancelado');
   if (active.length === 0) return;
 
@@ -691,10 +671,9 @@ const syncBusyDocsFromAppointments = async (list) => {
 
   await batch.commit();
 };
-  const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
+const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
-// --- BUSY SLOTS (PARA BLOQUEAR HORARIOS EN BOOKING, SIN LEER TODAS LAS CITAS) ---
 useEffect(() => {
   setBookingError('');
   setBusySlots(new Set());
@@ -715,7 +694,6 @@ useEffect(() => {
   });
 }, [selectedStaff?.id, selectedDate]);
 
-// Reset de hora si cambias profesional / día
 useEffect(() => {
   setSelectedTime(null);
 }, [selectedStaff?.id, selectedDate]);
@@ -745,7 +723,6 @@ const handleBookingSubmit = async () => {
     createdAt: new Date().toISOString(),
   };
 
-  // Validación UI extra (por si alguien manipuló el front)
   if (isTimeDisabled(selectedTime)) {
     setBookingError('Ese horario ya no está disponible. Elige otro por favor.');
     setStep(2);
@@ -754,7 +731,6 @@ const handleBookingSubmit = async () => {
 
   try {
     if (firebaseEnabled) {
-      // Transacción: bloquea horario + crea cita (evita dobles reservas simultáneas)
       const appsCol = collection(db, 'shops', SHOP_ID, 'appointments');
       const newRef = doc(appsCol);
       const busyId = `${selectedStaff.id}_${selectedDate}`;
@@ -768,7 +744,6 @@ const handleBookingSubmit = async () => {
         const existing = slots[selectedTime];
         const existingStatus = existing?.status || null;
 
-        // Si ya existe y NO está cancelado => está tomado
         if (existing && existingStatus !== 'Cancelado') {
           throw new Error('SLOT_TAKEN');
         }
@@ -800,7 +775,6 @@ const handleBookingSubmit = async () => {
         });
       });
     } else {
-      // fallback local si Firebase no está activo
       setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
     }
 
@@ -812,16 +786,20 @@ const handleBookingSubmit = async () => {
       return;
     }
 
-    // fallback local si falló Firebase por cualquier razón
     setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
     setStep(5);
   }
 };
 
+const getStaffDaySchedule = (staff, dateStr) => {
+  const weekKey = dateToWeekKey(dateStr);
+  const normalized = ensureStaffSchedule(staff);
+  return normalized.schedule[weekKey];
+};
+
 const isTimeDisabled = (timeStr) => {
   if (!selectedStaff || !selectedDate) return true;
 
-  // 1) Validar horario laboral del profesional
   const day = getStaffDaySchedule(selectedStaff, selectedDate);
   if (!day.enabled) return true;
 
@@ -830,25 +808,135 @@ const isTimeDisabled = (timeStr) => {
   const start = timeToMinutes(day.start);
   const end = timeToMinutes(day.end);
 
-  // Debe iniciar dentro del rango y terminar antes o igual al fin
   if (t0 < start) return true;
   if (t0 + serviceMins > end) return true;
 
-  // 2) Bloqueo por cita existente (busySlots de Firestore)
   if (busySlots?.has(timeStr)) return true;
 
   return false;
 };
 
-  // Auto-limpia la hora si se vuelve no disponible (por ejemplo, otra persona reservó antes)
   useEffect(() => {
     if (!selectedTime) return;
     try {
       if (isTimeDisabled(selectedTime)) setSelectedTime(null);
     } catch {
-      // ignore
     }
   }, [busySlots, selectedStaff?.id, selectedDate, selectedService?.id]);
+
+  // --- MISSING HANDLERS REIMPLIMENTATION ---
+  
+  const handleUpdateConfig = (newFields) => {
+    setConfig(prev => ({ ...prev, ...newFields }));
+  };
+
+  const handleAddStaff = () => {
+    const newStaff = {
+      id: Date.now(),
+      name: "Nuevo Profesional",
+      role: "Barbero",
+      image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=200",
+      pin: "0000",
+      schedule: makeDefaultSchedule()
+    };
+    setStaffData(prev => [...prev, newStaff]);
+  };
+
+  const handleUpdateStaff = (id, field, value) => {
+    setStaffData(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
+
+  const handleAddService = () => {
+    const newSvc = {
+      id: Date.now(),
+      title: "Nuevo Servicio",
+      category: ["Hombre"],
+      price: 1000,
+      duration: 30,
+      image: "",
+      description: "Descripción del servicio"
+    };
+    setServicesData(prev => [...prev, newSvc]);
+  };
+
+  const handleUpdateService = (id, field, value) => {
+    setServicesData(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
+
+  const handleDeleteService = (id) => {
+    setServicesData(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleAddReview = () => {
+    setReviewsData(prev => [...prev, {
+      id: Date.now(),
+      user: "Cliente Nuevo",
+      rating: 5,
+      comment: "Excelente servicio.",
+      image: ""
+    }]);
+  };
+
+  const handleUpdateReview = (id, field, value) => {
+    setReviewsData(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const handleDeleteReview = (id) => {
+    setReviewsData(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleAddProduct = () => {
+    setProductsData(prev => [...prev, {
+      id: Date.now(),
+      product: "Nuevo Producto",
+      price: 1000,
+      stock: 10,
+      unit: "unidad",
+      image: ""
+    }]);
+  };
+
+  const handleUpdateProduct = (id, field, value) => {
+    setProductsData(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const handleDeleteProduct = (id) => {
+    setProductsData(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleAddPortfolio = () => {
+    setPortfolioData(prev => [...prev, {
+      id: Date.now(),
+      image: "https://via.placeholder.com/800",
+      category: portfolioCategories[0] || "General",
+      title: "Nuevo Trabajo"
+    }]);
+  };
+
+  const handleUpdatePortfolio = (id, field, value) => {
+    setPortfolioData(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const handleDeletePortfolio = (id) => {
+    setPortfolioData(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleAddCategory = () => {
+    if (newCatName && !portfolioCategories.includes(newCatName)) {
+      setPortfolioCategories(prev => [...prev, newCatName]);
+      setNewCatName("");
+    }
+  };
+
+  const handleDeleteCategory = (cat) => {
+    setPortfolioCategories(prev => prev.filter(c => c !== cat));
+  };
+
+  const handleWhatsAppConfirm = () => {
+    if (!selectedStaff || !selectedDate || !selectedTime) return;
+    const msg = `Hola! Reservé un turno:\n\nServicio: ${selectedService.title}\nProfesional: ${selectedStaff.name}\nFecha: ${selectedDate} a las ${selectedTime}\nPrecio: $${paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}\n\n¿Me confirman?`;
+    window.open(`https://wa.me/${config.socialWhatsapp}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
 
 
   // --- VIEW: LOGIN ---
@@ -997,7 +1085,6 @@ const isTimeDisabled = (timeStr) => {
                                 </div>
                                 <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.stock > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{item.stock > 0 ? 'Disponible' : 'Agotado'}</span>
-                                    {/* FIX: Button logic for deletion */}
                                     <button 
                                       type="button"
                                       onClick={(e) => { e.preventDefault(); handleDeleteProduct(item.id); }} 
