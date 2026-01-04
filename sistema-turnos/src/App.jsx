@@ -411,12 +411,44 @@ export default function App() {
 
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
-  const handleBookingSubmit = () => {
-    let finalPrice = selectedService.price;
-    if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
-    const newAppointment = { id: Date.now(), serviceId: selectedService.id, serviceTitle: selectedService.title, staffId: selectedStaff.id, staffName: selectedStaff.name, price: finalPrice, originalPrice: selectedService.price, date: selectedDate, time: selectedTime, clientName: clientData.name, clientPhone: clientData.phone, paymentMethod, status: 'Confirmado', createdAt: new Date().toISOString() };
-    setAppointments([...appointments, newAppointment]); setStep(5);
+  const handleBookingSubmit = async () => {
+  let finalPrice = selectedService.price;
+  if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
+
+  const newAppointment = {
+    serviceId: selectedService.id,
+    serviceTitle: selectedService.title,
+    staffId: selectedStaff.id,
+    staffName: selectedStaff.name,
+    price: finalPrice,
+    originalPrice: selectedService.price,
+    date: selectedDate,
+    time: selectedTime,
+    clientName: clientData.name,
+    clientPhone: clientData.phone,
+    paymentMethod,
+    status: 'Confirmado',
+    createdAt: new Date().toISOString(),
   };
+
+  try {
+    if (firebaseEnabled) {
+      await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), {
+        ...newAppointment,
+        createdAtTS: serverTimestamp(),
+      });
+    } else {
+      // fallback local si Firebase no está activo
+      setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
+    }
+  } catch (err) {
+    // fallback local si falló Firebase por cualquier razón
+    setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
+  }
+
+  setStep(5);
+};
+
 
   const handleWhatsAppConfirm = () => {
     const message = `Hola! Soy ${clientData.name}. Quiero confirmar mi turno para ${selectedService.title} con ${selectedStaff.name} el día ${selectedDate} a las ${selectedTime}. Precio: $${paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}.`;
@@ -497,7 +529,7 @@ export default function App() {
              <button onClick={() => setDashboardView('settings')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'settings' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><Settings size={20} /> <span className="hidden md:block">Configuración</span></button>
           </nav>
           <div className="p-4 border-t border-slate-800">
-            <button onClick={() => setView('landing')} className="w-full flex items-center gap-3 text-sm text-red-400 hover:text-red-300 transition p-2 rounded-lg hover:bg-slate-800/50"><LogOut size={18} /> <span className="hidden md:block">Cerrar Sesión</span></button>
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 text-sm text-red-400 hover:text-red-300 transition p-2 rounded-lg hover:bg-slate-800/50"><LogOut size={18} /> <span className="hidden md:block">Cerrar Sesión</span></button>
           </div>
         </div>
 
