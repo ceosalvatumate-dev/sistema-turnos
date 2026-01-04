@@ -179,14 +179,14 @@ function MainApp() {
 
   const [appointments, setAppointments] = useState([]);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [loginMode, setLoginMode] = useState('admin'); // [NEW] 'admin' or 'staff'
+  const [loginMode, setLoginMode] = useState('admin'); // 'admin' or 'staff'
   const [loginError, setLoginError] = useState('');
   const [newCatName, setNewCatName] = useState(""); 
   
-  // [NEW] Staff View State
+  // Staff View State
   const [currentStaffUser, setCurrentStaffUser] = useState(null);
 
-  // [NEW] Critical flag to prevent overwriting Firebase with initial state
+  // Critical flag to prevent overwriting Firebase with initial state
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false); // Estado para el botón manual
 
@@ -245,7 +245,7 @@ function MainApp() {
     const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(JSON.parse(savedPortCats));
   }, []);
 
-  // [FIX] Sincronización SOLO DE LECTURA (Eliminé el useEffect de guardado automático)
+  // Sincronización SOLO DE LECTURA
   useEffect(() => {
     if (!firebaseEnabled) return;
 
@@ -268,7 +268,7 @@ function MainApp() {
 
       const data = snap.data();
 
-      // [FIX] Sanitización robusta para evitar el crash si falta 'schedule'
+      // Sanitización robusta para evitar el crash si falta 'schedule'
       const sanitizedStaff = (data.staffData || staffData).map(s => ({
         ...s,
         schedule: (s.schedule && s.schedule.start && s.schedule.end) ? s.schedule : { start: "09:00", end: "20:00", days: [1,2,3,4,5,6] }
@@ -297,7 +297,6 @@ function MainApp() {
       setProductsData(payload.productsData);
       setPortfolioCategories(payload.portfolioCategories);
       
-      // [NEW] Mark data as loaded so we can allow writes
       setDataLoaded(true);
     });
   }, [isAdmin, isSaving]); // Dependencia isSaving agregada
@@ -318,7 +317,7 @@ function MainApp() {
     });
   }, []); 
 
-  // [NEW] GUARDADO MANUAL - Reemplaza el useEffect automático peligroso
+  // GUARDADO MANUAL
   const handleManualSave = async () => {
       if (!firebaseEnabled || !isAdmin) return;
       setIsSaving(true);
@@ -349,21 +348,80 @@ function MainApp() {
     localStorage.setItem('appConfig', JSON.stringify(config)); 
   }, [config]);
 
+  // [FIX] Función de colores explícita para evitar purga de Tailwind
   const getColorClass = (type) => {
-    const safeColor = config?.primaryColor || 'blue';
-    const colors = {
-      blue: { bg: 'bg-blue-600', text: 'text-blue-600', hover: 'hover:bg-blue-700', light: 'bg-blue-50', border: 'border-blue-600', ring: 'focus:ring-blue-500', shadow: 'shadow-blue-500/20', bar: 'bg-blue-500' },
-      indigo: { bg: 'bg-indigo-600', text: 'text-indigo-600', hover: 'hover:bg-indigo-700', light: 'bg-indigo-50', border: 'border-indigo-600', ring: 'focus:ring-indigo-500', shadow: 'shadow-indigo-500/20', bar: 'bg-indigo-500' },
-      purple: { bg: 'bg-purple-600', text: 'text-purple-600', hover: 'hover:bg-purple-700', light: 'bg-purple-50', border: 'border-purple-600', ring: 'focus:ring-purple-500', shadow: 'shadow-purple-500/20', bar: 'bg-purple-500' },
-      rose: { bg: 'bg-rose-600', text: 'text-rose-600', hover: 'hover:bg-rose-700', light: 'bg-rose-50', border: 'border-rose-600', ring: 'focus:ring-rose-500', shadow: 'shadow-rose-500/20', bar: 'bg-rose-500' },
-      slate: { bg: 'bg-slate-800', text: 'text-slate-800', hover: 'hover:bg-slate-900', light: 'bg-slate-100', border: 'border-slate-800', ring: 'focus:ring-slate-500', shadow: 'shadow-slate-500/20', bar: 'bg-slate-700' },
+    // Si no hay config o primaryColor, usar 'blue' por defecto
+    const primary = config?.primaryColor || 'blue';
+    
+    // Mapeo explícito de TODAS las clases posibles
+    const colorMap = {
+      blue: { 
+        bg: 'bg-blue-600', 
+        text: 'text-blue-600', 
+        hover: 'hover:bg-blue-700', 
+        light: 'bg-blue-50', 
+        border: 'border-blue-600', 
+        ring: 'focus:ring-blue-500', 
+        shadow: 'shadow-blue-500/20', 
+        bar: 'bg-blue-500',
+        activeDay: 'border-blue-600 bg-blue-50 text-blue-700',
+        btn: 'bg-blue-600 text-white hover:bg-blue-700'
+      },
+      indigo: { 
+        bg: 'bg-indigo-600', 
+        text: 'text-indigo-600', 
+        hover: 'hover:bg-indigo-700', 
+        light: 'bg-indigo-50', 
+        border: 'border-indigo-600', 
+        ring: 'focus:ring-indigo-500', 
+        shadow: 'shadow-indigo-500/20', 
+        bar: 'bg-indigo-500',
+        activeDay: 'border-indigo-600 bg-indigo-50 text-indigo-700',
+        btn: 'bg-indigo-600 text-white hover:bg-indigo-700'
+      },
+      purple: { 
+        bg: 'bg-purple-600', 
+        text: 'text-purple-600', 
+        hover: 'hover:bg-purple-700', 
+        light: 'bg-purple-50', 
+        border: 'border-purple-600', 
+        ring: 'focus:ring-purple-500', 
+        shadow: 'shadow-purple-500/20', 
+        bar: 'bg-purple-500',
+        activeDay: 'border-purple-600 bg-purple-50 text-purple-700',
+        btn: 'bg-purple-600 text-white hover:bg-purple-700'
+      },
+      rose: { 
+        bg: 'bg-rose-600', 
+        text: 'text-rose-600', 
+        hover: 'hover:bg-rose-700', 
+        light: 'bg-rose-50', 
+        border: 'border-rose-600', 
+        ring: 'focus:ring-rose-500', 
+        shadow: 'shadow-rose-500/20', 
+        bar: 'bg-rose-500',
+        activeDay: 'border-rose-600 bg-rose-50 text-rose-700',
+        btn: 'bg-rose-600 text-white hover:bg-rose-700'
+      },
+      slate: { 
+        bg: 'bg-slate-800', 
+        text: 'text-slate-800', 
+        hover: 'hover:bg-slate-900', 
+        light: 'bg-slate-100', 
+        border: 'border-slate-800', 
+        ring: 'focus:ring-slate-500', 
+        shadow: 'shadow-slate-500/20', 
+        bar: 'bg-slate-700',
+        activeDay: 'border-slate-800 bg-slate-50 text-slate-800',
+        btn: 'bg-slate-800 text-white hover:bg-slate-900'
+      },
     };
-    return colors[safeColor] || colors['blue'];
+
+    return colorMap[primary] ? colorMap[primary][type] : colorMap['blue'][type];
   };
 
   const activeAppointments = useMemo(() => appointments.filter(a => a.status !== 'Cancelado'), [appointments]);
 
-  // Aquí definimos clientsData correctamente dentro del componente
   const clientsData = useMemo(() => {
     const clientsMap = {};
     const sortedAppointments = [...activeAppointments].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -578,7 +636,7 @@ function MainApp() {
   }
 
   const handleUpdateConfig = (newSettings) => { setConfig({...config, ...newSettings}); }
-  const handleAddStaff = () => { setStaffData([...staffData, { id: Date.now(), name: "Nuevo Personal", role: "Estilista", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200", schedule: { start: "09:00", end: "18:00", days: [1,2,3,4,5,6] } }]); }
+  const handleAddStaff = () => { setStaffData([...staffData, { id: Date.now(), name: "Nuevo Personal", role: "Estilista", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200", schedule: { start: "09:00", end: "18:00", days: [1,2,3,4,5] } }]); }
   const handleUpdateStaff = (id, field, value) => { setStaffData(staffData.map(s => s.id === id ? { ...s, [field]: value } : s)); }
   const handleAddService = () => { setServicesData([...servicesData, { id: Date.now(), title: "Nuevo Servicio", category: ["General"], price: 0, duration: 30, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=200", description: "Descripción del servicio" }]); }
   const handleDeleteService = (id) => { setServicesData(servicesData.filter(s => s.id !== id)); }
@@ -939,11 +997,11 @@ function MainApp() {
                             <span className="font-bold text-slate-500 text-xs uppercase">Horario:</span>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs">De</span>
-                                <input type="time" value={staff.schedule?.start || "09:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||{start:"09:00",end:"18:00",days:[]}), start: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
+                                <input type="time" value={staff.schedule?.start || "09:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, start: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
                             </div>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs">A</span>
-                                <input type="time" value={staff.schedule?.end || "18:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||{start:"09:00",end:"18:00",days:[]}), end: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
+                                <input type="time" value={staff.schedule?.end || "18:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, end: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
                             </div>
                             <div className="flex gap-1">
                                 {[1,2,3,4,5,6,0].map(d => (
@@ -952,7 +1010,7 @@ function MainApp() {
                                         onClick={() => {
                                             const days = staff.schedule?.days || [];
                                             const newDays = days.includes(d) ? days.filter(day => day !== d) : [...days, d];
-                                            handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||{start:"09:00",end:"18:00",days:[]}), days: newDays});
+                                            handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, days: newDays});
                                         }}
                                         className={`w-6 h-6 text-[10px] rounded flex items-center justify-center font-bold ${staff.schedule?.days?.includes(d) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}
                                     >
@@ -1004,10 +1062,10 @@ function MainApp() {
       <nav className={`fixed w-full z-40 transition-all duration-300 ${scrolled ? 'bg-white shadow-lg py-3' : 'bg-black/20 backdrop-blur-sm py-5'}`}>
         <div className="container mx-auto px-4 md:px-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            {config.logoUrl ? <img src={config.logoUrl} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-lg shadow-sm"/> : <div className={`p-2 rounded-lg transition-colors ${scrolled ? `${getColorClass('bg')} text-white` : `bg-white ${getColorClass('text')}`}`}><Scissors size={22} strokeWidth={2.5} /></div>}
+            {config.logoUrl ? <img src={config.logoUrl} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-lg shadow-sm"/> : <div className={`p-2 rounded-lg transition-colors ${scrolled ? getColorClass('btn') : `bg-white ${getColorClass('text')}`}`}><Scissors size={22} strokeWidth={2.5} /></div>}
             <div className="flex flex-col"><span className={`text-xl font-bold leading-none tracking-tight ${scrolled ? 'text-slate-900' : 'text-white'}`}>{config.businessName}</span><span className={`text-[10px] uppercase font-bold tracking-widest ${scrolled ? getColorClass('text') : 'text-blue-200'}`}>Reserva Online</span></div>
           </div>
-          <div className="hidden md:flex items-center gap-8"><a href="#" onClick={(e) => handleNavClick(e, 'top')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Inicio</a><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Servicios</a><a href="#store" onClick={(e) => handleNavClick(e, 'store')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Tienda</a><a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Portafolio</a><a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Reseñas</a><button onClick={() => setView('login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? `${getColorClass('bg')} text-white` : 'bg-white text-slate-900'}`}><User size={16} /> Soy Staff</button></div>
+          <div className="hidden md:flex items-center gap-8"><a href="#" onClick={(e) => handleNavClick(e, 'top')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Inicio</a><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Servicios</a><a href="#store" onClick={(e) => handleNavClick(e, 'store')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Tienda</a><a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Portafolio</a><a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Reseñas</a><button onClick={() => setView('login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? getColorClass('btn') : 'bg-white text-slate-900'}`}><User size={16} /> Soy Staff</button></div>
           <button className={`md:hidden p-2 rounded-md ${scrolled ? 'text-slate-800' : 'text-white'}`} onClick={() => setIsMenuOpen(!isMenuOpen)}><Menu size={28} /></button>
         </div>
         {isMenuOpen && (
@@ -1017,7 +1075,7 @@ function MainApp() {
             <a href="#store" onClick={(e) => handleNavClick(e, 'store')} className="text-slate-600 font-semibold p-3 hover:bg-slate-50 rounded-lg">Tienda</a>
             <a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className="text-slate-600 font-semibold p-3 hover:bg-slate-50 rounded-lg">Portafolio</a>
             <a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className="text-slate-600 font-semibold p-3 hover:bg-slate-50 rounded-lg">Reseñas</a>
-            <button onClick={() => { setView('login'); setIsMenuOpen(false); }} className={`mt-2 ${getColorClass('bg')} text-white px-4 py-3 rounded-lg text-sm font-bold w-full shadow-lg`}>Acceso Staff</button>
+            <button onClick={() => { setView('login'); setIsMenuOpen(false); }} className={`mt-2 ${getColorClass('btn')} px-4 py-3 rounded-lg text-sm font-bold w-full shadow-lg`}>Acceso Staff</button>
           </div>
         )}
       </nav>
@@ -1028,19 +1086,19 @@ function MainApp() {
           <div className="max-w-3xl">
             <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-6 leading-[1.1]">Tu estilo, <br/><span className={config.primaryColor === 'blue' ? 'text-blue-400' : config.primaryColor === 'indigo' ? 'text-indigo-400' : config.primaryColor === 'purple' ? 'text-purple-400' : 'text-rose-400'}>tu momento.</span></h1>
             <p className="text-xl text-slate-300 mb-10 leading-relaxed max-w-2xl font-light">La experiencia premium que mereces. Reserva tu cita con los mejores profesionales en segundos.</p>
-            <div className="flex flex-col sm:flex-row gap-4"><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`${getColorClass('bg')} text-white px-8 py-4 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-3 hover:scale-105 active:scale-95`}><Calendar size={20} /> Reservar Ahora</a></div>
+            <div className="flex flex-col sm:flex-row gap-4"><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`${getColorClass('btn')} px-8 py-4 rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-3 hover:scale-105 active:scale-95`}><Calendar size={20} /> Reservar Ahora</a></div>
           </div>
         </div>
       </header>
 
       <section id="servicios" className="py-24 bg-slate-50/50">
         <div className="container mx-auto px-4 md:px-8">
-          <div className="text-center mb-16"><h2 className="text-4xl font-extrabold text-slate-900 mb-4">Nuestros Servicios</h2><div className={`w-20 h-1.5 ${getColorClass('bg')} mx-auto rounded-full mb-6`}></div></div>
+          <div className="text-center mb-16"><h2 className="text-4xl font-extrabold text-slate-900 mb-4">Nuestros Servicios</h2><div className={`w-20 h-1.5 ${getColorClass('bar')} mx-auto rounded-full mb-6`}></div></div>
           <div className="flex flex-wrap justify-center gap-3 mb-16 sticky top-20 z-30 bg-slate-50/95 py-4 backdrop-blur-sm transition-all rounded-full px-4 max-w-fit mx-auto shadow-sm border border-slate-100">{CATEGORIES.map((cat) => (<button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 ${activeCategory === cat ? 'bg-slate-900 text-white shadow-lg transform scale-105' : 'bg-white text-slate-500 hover:bg-slate-100'}`}>{cat}</button>))}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredServices.map((service) => (
               <div key={service.id} className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-300 border border-slate-100 flex flex-col h-full">
-                <div className="h-64 overflow-hidden relative"><div className="absolute top-4 left-4 flex gap-2 z-10">{service.category.slice(0, 2).map((cat, idx) => (<span key={idx} className="bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-900 shadow-sm">{cat}</span>))}</div><img src={service.image} alt={service.title} className="w-full h-full object-cover transform group-hover:scale-110 transition duration-700 ease-out" /><div className={`absolute bottom-4 right-4 ${getColorClass('bg')} text-white px-4 py-2 rounded-xl font-bold shadow-lg`}>$ {service.price.toLocaleString('es-AR')}</div></div>
+                <div className="h-64 overflow-hidden relative"><div className="absolute top-4 left-4 flex gap-2 z-10">{service.category.slice(0, 2).map((cat, idx) => (<span key={idx} className="bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-900 shadow-sm">{cat}</span>))}</div><img src={service.image} alt={service.title} className="w-full h-full object-cover transform group-hover:scale-110 transition duration-700 ease-out" /><div className={`absolute bottom-4 right-4 ${getColorClass('btn')} px-4 py-2 rounded-xl font-bold shadow-lg`}>$ {service.price.toLocaleString('es-AR')}</div></div>
                 <div className="p-8 flex-grow flex flex-col"><h3 className="text-xl font-bold text-slate-900 mb-3">{service.title}</h3><p className="text-slate-500 text-sm leading-relaxed mb-8 line-clamp-3">{service.description}</p><div className="mt-auto"><button onClick={() => openBooking(service)} className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold hover:bg-slate-800 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10">Reservar Turno <ChevronRight size={18} /></button></div></div>
               </div>
             ))}
@@ -1069,7 +1127,7 @@ function MainApp() {
                                 <button 
                                     onClick={() => handleWhatsAppOrder(item)}
                                     disabled={item.stock === 0}
-                                    className={`p-2 rounded-full flex items-center gap-1 px-3 text-xs font-bold ${item.stock > 0 ? `${getColorClass('bg')} text-white hover:opacity-90` : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                                    className={`p-2 rounded-full flex items-center gap-1 px-3 text-xs font-bold ${item.stock > 0 ? `${getColorClass('btn')}` : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
                                 >
                                     <MessageCircle size={16}/> {dashboardStats.nextApp ? 'Pedir para mi cita' : 'Pedir'}
                                 </button>
@@ -1126,7 +1184,7 @@ function MainApp() {
                     {review.image && <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm"><img src={review.image} className="w-full h-full object-cover"/></div>}
                 </div>
                 <p className="text-slate-600 italic mb-6 leading-relaxed flex-grow">"{review.comment}"</p>
-                <div className="flex items-center gap-3 mt-auto"><div className={`w-10 h-10 rounded-full ${getColorClass('bg')} text-white flex items-center justify-center font-bold`}>{review.user.charAt(0)}</div><p className="font-bold text-slate-900">{review.user}</p></div>
+                <div className="flex items-center gap-3 mt-auto"><div className={`w-10 h-10 rounded-full ${getColorClass('btn')} flex items-center justify-center font-bold`}>{review.user.charAt(0)}</div><p className="font-bold text-slate-900">{review.user}</p></div>
             </div>
           ))}</div><div className="absolute top-0 right-0 h-full w-24 bg-gradient-to-l from-white to-transparent pointer-events-none md:block hidden"></div><div className="absolute top-0 left-0 h-full w-24 bg-gradient-to-r from-white to-transparent pointer-events-none md:block hidden"></div></div>
         </div>
@@ -1137,25 +1195,25 @@ function MainApp() {
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50"><div><h3 className="font-bold text-lg text-slate-900">Reservar Turno</h3><p className="text-xs text-slate-500">Paso {step} de 5</p></div><button onClick={() => setBookingModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500"><X size={20} /></button></div>
             <div className="p-6 overflow-y-auto">
-              {step === 1 && (<div className="animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-4">Elige un Profesional</h4><div className="grid gap-4">{staffData.map(staff => (<button key={staff.id} onClick={() => setSelectedStaff(staff)} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left group ${selectedStaff?.id === staff.id ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50` : 'border-slate-100 hover:border-slate-300'}`}><img src={staff.image} alt={staff.name} className="w-14 h-14 rounded-full object-cover group-hover:scale-105 transition" /><div><p className="font-bold text-slate-900">{staff.name}</p><p className="text-xs text-slate-500 font-medium">{staff.role}</p></div>{selectedStaff?.id === staff.id && <div className={`ml-auto ${getColorClass('bg')} text-white p-1 rounded-full`}><CheckCircle size={16} /></div>}</button>))}</div></div>)}
+              {step === 1 && (<div className="animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-4">Elige un Profesional</h4><div className="grid gap-4">{staffData.map(staff => (<button key={staff.id} onClick={() => setSelectedStaff(staff)} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left group ${selectedStaff?.id === staff.id ? `${getColorClass('activeDay')}` : 'border-slate-100 hover:border-slate-300'}`}><img src={staff.image} alt={staff.name} className="w-14 h-14 rounded-full object-cover group-hover:scale-105 transition" /><div><p className="font-bold text-slate-900">{staff.name}</p><p className="text-xs text-slate-500 font-medium">{staff.role}</p></div>{selectedStaff?.id === staff.id && <div className={`ml-auto ${getColorClass('btn')} p-1 rounded-full`}><CheckCircle size={16} /></div>}</button>))}</div></div>)}
               {step === 2 && (<div className="space-y-6 animate-in slide-in-from-right duration-300"><div><label className="block text-sm font-bold text-slate-700 mb-3">Día</label><div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">{weekDays.map((day, idx) => {
                   const hasSlots = getStaffSlots(selectedStaff, day).length > 0;
                   return (
-                    <button key={idx} disabled={!hasSlots} onClick={() => setSelectedDate(day.fullDate)} className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${selectedDate === day.fullDate ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50 text-${config.primaryColor}-700 shadow-md scale-105` : !hasSlots ? 'bg-slate-50 border-slate-50 opacity-50 cursor-not-allowed' : 'border-slate-100 text-slate-500 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{day.dayName}</span><span className="text-2xl font-bold">{day.dayNumber}</span></button>
+                    <button key={idx} disabled={!hasSlots} onClick={() => setSelectedDate(day.fullDate)} className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${selectedDate === day.fullDate ? `${getColorClass('activeDay')} shadow-md scale-105` : !hasSlots ? 'bg-slate-50 border-slate-50 opacity-50 cursor-not-allowed' : 'border-slate-100 text-slate-500 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{day.dayName}</span><span className="text-2xl font-bold">{day.dayNumber}</span></button>
                   );
               })}</div></div>{selectedDate && (<div className="animate-in fade-in slide-in-from-bottom-2 duration-300"><label className="block text-sm font-bold text-slate-700 mb-3">Horario con {selectedStaff.name.split(' ')[0]}</label><div className="grid grid-cols-4 gap-3">{getStaffSlots(selectedStaff, weekDays.find(d=>d.fullDate===selectedDate)).map((time) => {
                   const available = isSlotAvailable(selectedStaff.id, selectedDate, time);
                   return (
-                    <button key={time} disabled={!available} onClick={() => setSelectedTime(time)} className={`py-2 rounded-lg text-sm font-semibold transition-all ${selectedTime === time ? `${getColorClass('bg')} text-white shadow-md transform scale-105` : !available ? 'bg-red-50 text-red-300 cursor-not-allowed line-through' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{time}</button>
+                    <button key={time} disabled={!available} onClick={() => setSelectedTime(time)} className={`py-2 rounded-lg text-sm font-semibold transition-all ${selectedTime === time ? `${getColorClass('btn')} shadow-md transform scale-105` : !available ? 'bg-red-50 text-red-300 cursor-not-allowed line-through' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{time}</button>
                   );
               })}</div></div>)}</div>)}
               {step === 3 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><div className="space-y-3"><label className="font-bold text-slate-700">Nombre</label><input type="text" value={clientData.name} onChange={(e) => setClientData({...clientData, name: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: Juan Pérez"/></div><div className="space-y-3"><label className="font-bold text-slate-700">WhatsApp</label><input type="tel" value={clientData.phone} onChange={(e) => setClientData({...clientData, phone: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: 11 1234 5678"/></div></div>)}
               {step === 4 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-2">Método de Pago</h4><button onClick={() => setPaymentMethod('mp')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'mp' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><CreditCard size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Mercado Pago / Tarjeta</p><p className="text-xs text-green-600 font-bold">¡Ahorras 5% pagando ahora!</p></div></div><div className="text-right"><p className="text-xs text-slate-400 line-through">${selectedService.price}</p><p className="font-bold text-blue-600">${selectedService.price * 0.95}</p></div></button><button onClick={() => setPaymentMethod('cash')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'cash' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600"><DollarSign size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Efectivo en el local</p><p className="text-xs text-slate-500">Pagas el total al asistir</p></div></div><p className="font-bold text-slate-700">${selectedService.price}</p></button></div>)}
-              {step === 5 && (<div className="text-center py-8 animate-in zoom-in duration-300"><div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100"><CheckCircle size={48} /></div><h3 className="text-2xl font-bold text-slate-900 mb-2">¡Turno Confirmado!</h3><div className="bg-slate-50 p-6 rounded-2xl text-left space-y-3 mb-6 border border-slate-100 shadow-sm relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${getColorClass('bg')}`}></div><div className="flex justify-between items-center"><span className="text-slate-500 text-sm">Profesional</span><span className="font-bold text-slate-900 flex items-center gap-2">{selectedStaff.name}</span></div><div className="flex justify-between"><span className="text-slate-500 text-sm">Fecha</span><span className="font-bold text-slate-900">{selectedDate} - {selectedTime} hs</span></div><div className="flex justify-between border-t border-slate-200 pt-3 mt-2"><span className="font-bold text-slate-900">Total {paymentMethod === 'mp' ? '(con dcto.)' : ''}</span><span className={`font-bold ${getColorClass('text')}`}>$ {paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}</span></div></div>
+              {step === 5 && (<div className="text-center py-8 animate-in zoom-in duration-300"><div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100"><CheckCircle size={48} /></div><h3 className="text-2xl font-bold text-slate-900 mb-2">¡Turno Confirmado!</h3><div className="bg-slate-50 p-6 rounded-2xl text-left space-y-3 mb-6 border border-slate-100 shadow-sm relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${getColorClass('bar')}`}></div><div className="flex justify-between items-center"><span className="text-slate-500 text-sm">Profesional</span><span className="font-bold text-slate-900 flex items-center gap-2">{selectedStaff.name}</span></div><div className="flex justify-between"><span className="text-slate-500 text-sm">Fecha</span><span className="font-bold text-slate-900">{selectedDate} - {selectedTime} hs</span></div><div className="flex justify-between border-t border-slate-200 pt-3 mt-2"><span className="font-bold text-slate-900">Total {paymentMethod === 'mp' ? '(con dcto.)' : ''}</span><span className={`font-bold ${getColorClass('text')}`}>$ {paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}</span></div></div>
               <button onClick={handleWhatsAppConfirm} className="w-full bg-green-500 text-white py-3.5 rounded-xl font-bold hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2 mb-3"><MessageCircle size={20} /> Recibir confirmación en WhatsApp</button>
               <button onClick={() => setBookingModalOpen(false)} className="w-full bg-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-300 transition">Cerrar</button></div>)}
             </div>
-            {step < 5 && (<div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">{step > 1 && <button onClick={() => setStep(step - 1)} className="px-6 py-3.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-white transition">Atrás</button>}{step === 1 && <button disabled={!selectedStaff} onClick={() => setStep(2)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 2 && <button disabled={!selectedDate || !selectedTime} onClick={() => setStep(3)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 3 && <button disabled={!clientData.name || !clientData.phone} onClick={() => setStep(4)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Ir al Pago <ChevronRight size={18}/></button>}{step === 4 && <button disabled={!paymentMethod} onClick={handleBookingSubmit} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Confirmar Reserva <CheckCircle size={18}/></button>}</div>)}
+            {step < 5 && (<div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">{step > 1 && <button onClick={() => setStep(step - 1)} className="px-6 py-3.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-white transition">Atrás</button>}{step === 1 && <button disabled={!selectedStaff} onClick={() => setStep(2)} className={`flex-1 ${getColorClass('btn')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 2 && <button disabled={!selectedDate || !selectedTime} onClick={() => setStep(3)} className={`flex-1 ${getColorClass('btn')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 3 && <button disabled={!clientData.name || !clientData.phone} onClick={() => setStep(4)} className={`flex-1 ${getColorClass('btn')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Ir al Pago <ChevronRight size={18}/></button>}{step === 4 && <button disabled={!paymentMethod} onClick={handleBookingSubmit} className={`flex-1 ${getColorClass('btn')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Confirmar Reserva <CheckCircle size={18}/></button>}</div>)}
           </div>
         </div>
       )}
@@ -1163,7 +1221,7 @@ function MainApp() {
       <footer id="contacto" className="bg-slate-900 text-slate-400 py-16">
         <div className="container mx-auto px-4 md:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12 text-sm">
-            <div><div className="flex items-center gap-2 text-white mb-4"><div className={`${getColorClass('bg')} p-1.5 rounded-lg`}><Scissors size={18}/></div><span className="font-bold text-lg">{config.businessName}</span></div><p>Solución integral para gestión de citas.</p></div>
+            <div><div className="flex items-center gap-2 text-white mb-4"><div className={`${getColorClass('btn')} p-1.5 rounded-lg`}><Scissors size={18}/></div><span className="font-bold text-lg">{config.businessName}</span></div><p>Solución integral para gestión de citas.</p></div>
             <div><h4 className="text-white font-bold mb-4">Contacto</h4><ul className="space-y-2"><li className="flex items-center gap-2"><MapPin size={16}/> Salta, Argentina</li><li className="flex items-center gap-2"><Mail size={16}/> contacto@sistema.com</li></ul></div>
             <div>
                 <h4 className="text-white font-bold mb-4">Síguenos</h4>
