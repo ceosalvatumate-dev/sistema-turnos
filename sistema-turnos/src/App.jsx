@@ -1222,7 +1222,7 @@ function MainApp() {
         <div className="container mx-auto px-4 md:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12 text-sm">
             <div><div className="flex items-center gap-2 text-white mb-4"><div className={`${getColorClass('btn')} p-1.5 rounded-lg`}><Scissors size={18}/></div><span className="font-bold text-lg">{config.businessName}</span></div><p>Solución integral para gestión de citas.</p></div>
-            <div><h4 className="text-white font-bold mb-4">Contacto</h4><ul className="space-y-2"><li className="flex items-center gap-2"><MapPin size={16}/> Ciudad de México, Col.SantaMa. Ribera/>li><li className="flex items-center gap-2"><Mail size={16}/> contacto@sistema.com</li></ul></div>
+            <div><h4 className="text-white font-bold mb-4">Contacto</h4><ul className="space-y-2"><li className="flex items-center gap-2"><MapPin size={16}/> Ciudad de México, Col.SantaMa. Ribera />li><li className="flex items-center gap-2"><Mail size={16}/> contacto@sistema.com</li></ul></div>
             <div>
                 <h4 className="text-white font-bold mb-4">Síguenos</h4>
                 <div className="flex gap-3">
