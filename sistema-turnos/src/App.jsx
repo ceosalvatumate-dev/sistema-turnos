@@ -17,8 +17,6 @@ import {
   doc, setDoc, onSnapshot, updateDoc,
   collection, addDoc, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
-
-
 /**
  * * */
 
