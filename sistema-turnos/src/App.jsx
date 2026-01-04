@@ -1048,77 +1048,142 @@ const isTimeDisabled = (timeStr) => {
               </div>
 
               {/* Staff Management */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-                <div className="flex justify-between items-center border-b pb-4 mb-4"><h3 className="text-lg font-bold text-slate-800">Profesionales</h3><button onClick={handleAddStaff} className={`text-sm ${getColorClass('text')} font-bold flex items-center gap-1`}><PlusCircle size={16}/> Agregar</button></div>
-                <div className="grid gap-4">{staffData.map(staff => (<div key={staff.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50/50"><div className="relative group w-16 h-16 shrink-0"><img src={staff.image} className="w-full h-full rounded-full object-cover"/><div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><Upload size={16} className="text-white"/></div></div><div className="flex-1 w-full space-y-2"><input type="text" value={staff.name} onChange={(e) => handleUpdateStaff(staff.id, 'name', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none font-bold text-slate-800" placeholder="Nombre"/><input type="text" value={staff.role} onChange={(e) => handleUpdateStaff(staff.id, 'role', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none text-sm text-slate-500" placeholder="Rol"/><input type="text" value={staff.image} onChange={(e) => handleUpdateStaff(staff.id, 'image', e.target.value)} className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-400 outline-none focus:border-slate-400" placeholder="URL Foto de Perfil"/></div>
-                          <div className="w-full sm:w-48 space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-slate-400">PIN Profesional</label>
-                            <input
-                              type="text"
-                              value={staff.pin || ''}
-                              onChange={(e) => handleUpdateStaff(staff.id, 'pin', e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
-                              placeholder="Ej: 1234"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setExpandedStaffId(expandedStaffId === staff.id ? null : staff.id)}
-                              className="w-full text-xs font-bold text-slate-600 border border-slate-200 rounded px-2 py-1 hover:bg-white transition"
-                            >
-                              {expandedStaffId === staff.id ? 'Ocultar horarios' : 'Editar horarios'}
-                            </button>
-                          </div>
-                          <button onClick={() => { setStaffData(staffData.filter(s => s.id !== staff.id)) }} className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
-                        </div>
-                        {expandedStaffId === staff.id && (
-                          <div className="mt-3 bg-white border border-slate-200 rounded-xl p-4">
-                            <p className="text-xs text-slate-500 mb-3"><span className="font-bold text-slate-700">Horarios de trabajo</span> (se guardan automáticamente)</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {WEEK_KEYS.map((k) => (
-                                <div key={k} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={ensureStaffSchedule(staff).schedule[k].enabled}
-                                      onChange={(e) => {
-                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], enabled: e.target.checked } };
-                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
-                                      }}
-                                    />
-                                    <span className="text-sm font-bold text-slate-700">{WEEK_LABELS[k]}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <select
-                                      value={ensureStaffSchedule(staff).schedule[k].start}
-                                      onChange={(e) => {
-                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], start: e.target.value } };
-                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
-                                      }}
-                                      className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
-                                    >
-                                      {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                    <span className="text-xs text-slate-400">a</span>
-                                    <select
-                                      value={ensureStaffSchedule(staff).schedule[k].end}
-                                      onChange={(e) => {
-                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], end: e.target.value } };
-                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
-                                      }}
-                                      className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
-                                    >
-                                      {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>))}</div>
-              </div>
+	              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+	                <div className="flex justify-between items-center border-b pb-4 mb-4">
+	                  <h3 className="text-lg font-bold text-slate-800">Profesionales</h3>
+	                  <button onClick={handleAddStaff} className={`text-sm ${getColorClass('text')} font-bold flex items-center gap-1`}>
+	                    <PlusCircle size={16}/> Agregar
+	                  </button>
+	                </div>
 
-              {/* Review Management */}
+	                <div className="grid gap-4">
+	                  {staffData.map((staff) => (
+	                    <div key={staff.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-3">
+	                      <div className="flex flex-col sm:flex-row items-center gap-4">
+	                        <div className="relative group w-16 h-16 shrink-0">
+	                          <img src={staff.image} className="w-full h-full rounded-full object-cover" />
+	                          <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+	                            <Upload size={16} className="text-white" />
+	                          </div>
+	                        </div>
+
+	                        <div className="flex-1 w-full space-y-2">
+	                          <input
+	                            type="text"
+	                            value={staff.name}
+	                            onChange={(e) => handleUpdateStaff(staff.id, 'name', e.target.value)}
+	                            className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none font-bold text-slate-800"
+	                            placeholder="Nombre"
+	                          />
+	                          <input
+	                            type="text"
+	                            value={staff.role}
+	                            onChange={(e) => handleUpdateStaff(staff.id, 'role', e.target.value)}
+	                            className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none text-sm text-slate-500"
+	                            placeholder="Rol"
+	                          />
+	                          <input
+	                            type="text"
+	                            value={staff.image}
+	                            onChange={(e) => handleUpdateStaff(staff.id, 'image', e.target.value)}
+	                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-400 outline-none focus:border-slate-400"
+	                            placeholder="URL Foto de Perfil"
+	                          />
+	                        </div>
+
+	                        <div className="w-full sm:w-48 space-y-2">
+	                          <label className="text-[10px] uppercase font-bold text-slate-400">PIN Profesional</label>
+	                          <input
+	                            type="text"
+	                            value={staff.pin || ''}
+	                            onChange={(e) => handleUpdateStaff(staff.id, 'pin', e.target.value)}
+	                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+	                            placeholder="Ej: 1234"
+	                          />
+	                          <button
+	                            type="button"
+	                            onClick={() => setExpandedStaffId(expandedStaffId === staff.id ? null : staff.id)}
+	                            className="w-full text-xs font-bold text-slate-600 border border-slate-200 rounded px-2 py-1 hover:bg-white transition"
+	                          >
+	                            {expandedStaffId === staff.id ? 'Ocultar horarios' : 'Editar horarios'}
+	                          </button>
+	                        </div>
+
+	                        <button
+	                          onClick={() => { setStaffData(staffData.filter(s => s.id !== staff.id)) }}
+	                          className="text-slate-400 hover:text-red-500"
+	                        >
+	                          <Trash2 size={18}/>
+	                        </button>
+	                      </div>
+
+	                      {expandedStaffId === staff.id && (
+	                        <div className="bg-white border border-slate-200 rounded-xl p-4">
+	                          <p className="text-xs text-slate-500 mb-3">
+	                            <span className="font-bold text-slate-700">Horarios de trabajo</span> (se guardan automáticamente)
+	                          </p>
+
+	                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                            {WEEK_KEYS.map((k) => (
+	                              <div key={k} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+	                                <div className="flex items-center gap-2">
+	                                  <input
+	                                    type="checkbox"
+	                                    checked={ensureStaffSchedule(staff).schedule[k].enabled}
+	                                    onChange={(e) => {
+	                                      const nextSchedule = {
+	                                        ...ensureStaffSchedule(staff).schedule,
+	                                        [k]: { ...ensureStaffSchedule(staff).schedule[k], enabled: e.target.checked }
+	                                      };
+	                                      handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+	                                    }}
+	                                  />
+	                                  <span className="text-sm font-bold text-slate-700">{WEEK_LABELS[k]}</span>
+	                                </div>
+
+	                                <div className="flex items-center gap-2">
+	                                  <select
+	                                    value={ensureStaffSchedule(staff).schedule[k].start}
+	                                    onChange={(e) => {
+	                                      const nextSchedule = {
+	                                        ...ensureStaffSchedule(staff).schedule,
+	                                        [k]: { ...ensureStaffSchedule(staff).schedule[k], start: e.target.value }
+	                                      };
+	                                      handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+	                                    }}
+	                                    className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
+	                                  >
+	                                    {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+	                                  </select>
+
+	                                  <span className="text-xs text-slate-400">a</span>
+
+	                                  <select
+	                                    value={ensureStaffSchedule(staff).schedule[k].end}
+	                                    onChange={(e) => {
+	                                      const nextSchedule = {
+	                                        ...ensureStaffSchedule(staff).schedule,
+	                                        [k]: { ...ensureStaffSchedule(staff).schedule[k], end: e.target.value }
+	                                      };
+	                                      handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+	                                    }}
+	                                    className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
+	                                  >
+	                                    {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+	                                  </select>
+	                                </div>
+	                              </div>
+	                            ))}
+	                          </div>
+	                        </div>
+	                      )}
+	                    </div>
+	                  ))}
+	                </div>
+	              </div>
+
+
+{/* Review Management */}
               <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4 mb-4"><h3 className="text-lg font-bold text-slate-800">Gestionar Reseñas</h3><button onClick={handleAddReview} className={`text-sm ${getColorClass('text')} font-bold flex items-center gap-1`}><PlusCircle size={16}/> Agregar</button></div>
                 <div className="grid gap-4 max-h-96 overflow-y-auto pr-2">{reviewsData.map(review => (<div key={review.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-3"><div className="flex justify-between items-start"><div className="flex-1 space-y-2"><div className="flex items-center gap-2"><input type="text" value={review.user} onChange={(e) => handleUpdateReview(review.id, 'user', e.target.value)} className="bg-transparent font-bold text-slate-800 border-b border-transparent focus:border-slate-300 outline-none w-32"/><div className="flex text-yellow-400">{[...Array(5)].map((_, i) => (<Star key={i} size={14} fill={i < review.rating ? "currentColor" : "none"} className="cursor-pointer" onClick={() => handleUpdateReview(review.id, 'rating', i + 1)} />))}</div></div><textarea value={review.comment} onChange={(e) => handleUpdateReview(review.id, 'comment', e.target.value)} className="w-full bg-white border border-slate-200 rounded p-2 text-sm text-slate-600 outline-none focus:border-slate-400" rows={2} /></div><button onClick={() => handleDeleteReview(review.id)} className="text-slate-400 hover:text-red-500 ml-2"><Trash2 size={18}/></button></div></div>))}</div>
