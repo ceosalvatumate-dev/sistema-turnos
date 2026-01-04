@@ -9,7 +9,8 @@ import {
   Smartphone, Share2, Download, Image as ImageIcon,
   Edit2, Trash2, PlusCircle, Save, BarChart, Camera, Upload, 
   Link as LinkIcon, ShoppingBag, Tag, FileSpreadsheet, XCircle,
-  Activity, PieChart, BarChart2, Briefcase, CheckSquare, Ban
+  Activity, PieChart, BarChart2, Briefcase, CheckSquare, Ban,
+  Save as SaveIcon
 } from 'lucide-react';
 import { auth, db, firebaseEnabled } from './firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -17,6 +18,8 @@ import {
   doc, setDoc, onSnapshot, updateDoc,
   collection, addDoc, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
+
+
 /**
  * * */
 
@@ -32,7 +35,7 @@ const INITIAL_CONFIG = {
   socialWhatsapp: "5491112345678"
 };
 
-// [NEW] Added schedule configuration per staff member
+// Staff con horarios por defecto
 const INITIAL_STAFF = [
   { 
     id: 1, 
@@ -98,13 +101,6 @@ const INITIAL_PORTFOLIO = [
 
 const CATEGORIES = ["Todos", "Hombre", "Mujer", "Barbería", "Estilismo", "Belleza"];
 
-// [NEW] Global Time Slots deprecated in favor of dynamic generation, but kept for fallback
-const BASE_TIME_SLOTS = [];
-for (let hour = 9; hour < 20; hour++) {
-  BASE_TIME_SLOTS.push(`${hour < 10 ? '0' + hour : hour}:00`);
-  BASE_TIME_SLOTS.push(`${hour < 10 ? '0' + hour : hour}:30`);
-}
-
 const getNextDays = () => {
   const days = [];
   const today = new Date();
@@ -165,15 +161,13 @@ export default function App() {
 
   const [appointments, setAppointments] = useState([]);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [loginMode, setLoginMode] = useState('admin'); // [NEW] 'admin' or 'staff'
+  const [loginMode, setLoginMode] = useState('admin'); // 'admin' or 'staff'
   const [loginError, setLoginError] = useState('');
   const [newCatName, setNewCatName] = useState(""); 
   
-  // [NEW] Staff View State
   const [currentStaffUser, setCurrentStaffUser] = useState(null);
-
-  // [NEW] Critical flag to prevent overwriting Firebase with initial state
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // [NEW] Estado de guardado manual
 
   const reviewsRef = useRef(null);
   const SHOP_ID = 'default';
@@ -185,14 +179,12 @@ export default function App() {
 
   useEffect(() => {
     if (!firebaseEnabled) {
-        setDataLoaded(true); // If no firebase, we are "loaded" immediately from defaults/local
+        setDataLoaded(true); 
         return;
     }
     return onAuthStateChanged(auth, (user) => setFbUser(user));
   }, []);
 
-
-  // --- SCROLL SUAVE ---
   const handleNavClick = (e, targetId) => {
     e.preventDefault();
     setIsMenuOpen(false); 
@@ -219,7 +211,6 @@ export default function App() {
   // Cargar localStorage SOLO si Firebase NO está activo
   useEffect(() => {
     if (firebaseEnabled) return;
-
     const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
     const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
     const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
@@ -230,17 +221,16 @@ export default function App() {
     const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(JSON.parse(savedPortCats));
   }, []);
 
-  // [FIX] Robust Sync: Handle "se borra todo" by ensuring we read first.
+  // [FIX] Sincronización SOLO LECTURA para evitar Loops
   useEffect(() => {
     if (!firebaseEnabled) return;
 
     const shopRef = doc(db, 'shops', SHOP_ID);
 
     return onSnapshot(shopRef, async (snap) => {
-      // Si no existe el doc aún, lo crea el admin automáticamente PERO solo si está logueado
-      // Para evitar que un usuario random triggerée la creación vacía
       if (!snap.exists()) {
         if (isAdmin) {
+          // Inicializar solo si es admin
           const payload = {
             config, staffData, servicesData, reviewsData,
             portfolioData, productsData, portfolioCategories,
@@ -253,8 +243,6 @@ export default function App() {
       }
 
       const data = snap.data();
-
-      // [FIX] Merge remote data with local defaults structure if remote is partial
       const payload = {
         config: data.config ?? config,
         staffData: data.staffData ?? staffData,
@@ -265,6 +253,10 @@ export default function App() {
         portfolioCategories: data.portfolioCategories ?? portfolioCategories,
       };
 
+      // Si nosotros mismos acabamos de guardar, no actualizamos el estado para evitar re-render innecesario
+      // aunque Firestore es inteligente, mejor prevenir.
+      if (isSaving) return;
+
       lastRemoteRef.current = JSON.stringify(payload);
 
       setConfig(payload.config);
@@ -274,22 +266,15 @@ export default function App() {
       setPortfolioData(payload.portfolioData);
       setProductsData(payload.productsData);
       setPortfolioCategories(payload.portfolioCategories);
-      
-      // [NEW] Mark data as loaded so we can allow writes
       setDataLoaded(true);
     });
-  }, [isAdmin]);
+  }, [isAdmin, isSaving]); // Agregamos isSaving a deps para que no lea mientras guarda
 
-  // Sync Appointments
+  // Sync Appointments (Always Listen)
   useEffect(() => {
     if (!firebaseEnabled) return;
-
-    // [FIX] Allow reading appointments even if not admin (for blocking slots logic)
-    // In a real app, use Cloud Functions or stricter security rules. 
-    // Here we read all to check availability.
     const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
     const q = query(appsRef, orderBy('createdAtTS', 'desc'));
-
     return onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => {
         const { createdAtTS, ...rest } = d.data();
@@ -297,31 +282,29 @@ export default function App() {
       });
       setAppointments(list);
     });
-  }, []); // Remove isAdmin dependency so clients can see busy slots
+  }, []);
 
-  // [FIX] Write Back Effect: Only runs if dataLoaded is true
-  useEffect(() => {
-    if (!firebaseEnabled || !isAdmin || !dataLoaded) return;
+  // [FIX] AUTO SAVE REMOVED. Added manual save function below.
 
-    const payload = {
-      config, staffData, servicesData, reviewsData,
-      portfolioData, productsData, portfolioCategories,
-    };
-
-    const next = JSON.stringify(payload);
-    if (lastRemoteRef.current === next) return;
-
-    const shopRef = doc(db, 'shops', SHOP_ID);
-
-    const t = setTimeout(async () => {
-      // [FIX] Use merge: true to avoid nuking fields if something goes wrong
-      await setDoc(shopRef, payload, { merge: true });
-      lastRemoteRef.current = next;
-    }, 1000); // Increased debounce to 1s for safety
-
-    return () => clearTimeout(t);
-  }, [isAdmin, dataLoaded, config, staffData, servicesData, reviewsData, portfolioData, productsData, portfolioCategories]);
-
+  const handleManualSave = async () => {
+      if (!firebaseEnabled || !isAdmin) return;
+      setIsSaving(true);
+      try {
+        const payload = {
+            config, staffData, servicesData, reviewsData,
+            portfolioData, productsData, portfolioCategories,
+        };
+        await setDoc(doc(db, 'shops', SHOP_ID), payload, { merge: true });
+        // Simular pequeño delay para feedback visual
+        await new Promise(r => setTimeout(r, 500));
+        alert("¡Cambios guardados correctamente en la nube!");
+      } catch (error) {
+          console.error(error);
+          alert("Error al guardar cambios.");
+      } finally {
+          setIsSaving(false);
+      }
+  };
 
   useEffect(() => { 
     if (firebaseEnabled) return;
@@ -332,7 +315,6 @@ export default function App() {
     if (firebaseEnabled) return;
     localStorage.setItem('appConfig', JSON.stringify(config)); 
   }, [config]);
-  // ... (Other local storage effects omitted for brevity but logic implies they stay if needed)
 
   const getColorClass = (type) => {
     const colors = {
@@ -345,7 +327,6 @@ export default function App() {
     return colors[config.primaryColor][type];
   };
 
-  // [FIX] Exclude cancelled appointments from revenue stats
   const activeAppointments = useMemo(() => appointments.filter(a => a.status !== 'Cancelado'), [appointments]);
 
   const clientsData = useMemo(() => {
@@ -370,7 +351,6 @@ export default function App() {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const todayStr = today.toISOString().split('T')[0];
     
-    // Use activeAppointments instead of appointments
     const totalRevenue = activeAppointments.reduce((sum, app) => sum + app.price, 0);
     const todayRevenue = activeAppointments.filter(app => app.date === todayStr).reduce((sum, app) => sum + app.price, 0);
     const weeklyRevenue = activeAppointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfWeek && appDate <= today; }).reduce((sum, app) => sum + app.price, 0);
@@ -410,7 +390,6 @@ export default function App() {
     e.preventDefault();
 
     if (loginMode === 'staff') {
-        // [NEW] Simple logic for Staff login (Name check for now, can be password protected later)
         const staffMember = staffData.find(s => s.name.toLowerCase() === loginData.email.toLowerCase() || s.name === loginData.email);
         if (staffMember) {
             setCurrentStaffUser(staffMember);
@@ -422,7 +401,6 @@ export default function App() {
         return;
     }
 
-    // Admin Login Logic
     if (!firebaseEnabled) {
       if (loginData.email === 'admin@sistema.com' && loginData.password === 'admin123') {
         setView('dashboard');
@@ -451,7 +429,6 @@ export default function App() {
     }
   };
 
-  // [NEW] Double Booking Logic Helper
   const isSlotAvailable = (staffId, date, time) => {
       return !appointments.some(app => 
           app.staffId === staffId && 
@@ -461,11 +438,9 @@ export default function App() {
       );
   };
 
-  // [NEW] Generate slots based on staff configuration
   const getStaffSlots = (staff, dateObj) => {
       if (!staff || !staff.schedule || !dateObj) return [];
       
-      // Check if staff works this day of week
       if (!staff.schedule.days.includes(dateObj.dayOfWeek)) return [];
 
       const slots = [];
@@ -488,7 +463,6 @@ export default function App() {
       }
       return slots;
   };
-
 
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
@@ -528,7 +502,6 @@ export default function App() {
     setStep(5);
   };
 
-  // [NEW] Update Appointment Status Helper
   const updateAppointmentStatus = async (appId, newStatus) => {
     if(firebaseEnabled) {
         const appRef = doc(db, 'shops', SHOP_ID, 'appointments', appId);
@@ -544,7 +517,6 @@ export default function App() {
     window.open(whatsappUrl, '_blank');
   };
 
-  // [NEW] Smart WhatsApp Order
   const handleWhatsAppOrder = (product) => {
       let message = `Hola! Quisiera comprar: ${product.product}.`;
       if (dashboardStats.nextApp) {
@@ -588,7 +560,6 @@ export default function App() {
             <h2 className="text-2xl font-bold text-slate-800">Acceso al Sistema</h2><p className="text-slate-500 text-sm">Selecciona tu rol para continuar</p>
           </div>
 
-          {/* [NEW] Role Selection Toggle */}
           <div className="flex p-1 bg-slate-100 rounded-lg mb-6">
               <button onClick={() => setLoginMode('admin')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${loginMode === 'admin' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Dueño</button>
               <button onClick={() => setLoginMode('staff')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${loginMode === 'staff' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Profesional</button>
@@ -613,7 +584,7 @@ export default function App() {
     );
   }
 
-  // --- VIEW: STAFF DASHBOARD [NEW] ---
+  // --- VIEW: STAFF DASHBOARD ---
   if (view === 'staff-view' && currentStaffUser) {
       const todayStr = new Date().toISOString().split('T')[0];
       const myAppointments = appointments.filter(a => a.staffId === currentStaffUser.id && a.date === todayStr && a.status !== 'Cancelado').sort((a,b) => a.time.localeCompare(b.time));
@@ -663,7 +634,7 @@ export default function App() {
       );
   }
 
-  // --- VIEW: DASHBOARD ---
+  // --- VIEW: DASHBOARD (ADMIN) ---
   if (view === 'dashboard') {
     return (
       <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
@@ -705,7 +676,16 @@ export default function App() {
               <p className="text-sm text-slate-500">Bienvenido al sistema de administración.</p>
             </div>
             <div className="flex items-center gap-4">
-               {/* [FIX] Show Data Loading State */}
+               {/* [NEW] MANUAL SAVE BUTTON */}
+               <button 
+                onClick={handleManualSave}
+                disabled={isSaving}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition shadow-md ${isSaving ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+               >
+                 <SaveIcon size={18} className={isSaving ? 'animate-spin' : ''} />
+                 {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+               </button>
+
                {!dataLoaded && firebaseEnabled ? (
                    <div className="text-orange-500 text-xs font-bold animate-pulse">Sincronizando...</div>
                ) : (
@@ -725,7 +705,7 @@ export default function App() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden"><div className={`absolute top-0 right-0 p-4 opacity-10 ${getColorClass('text')}`}><Calendar size={40}/></div><p className="text-slate-500 text-xs font-bold uppercase mb-2">Citas Hoy</p><h3 className={`text-2xl font-bold ${getColorClass('text')}`}>{dashboardStats.dailyAppointments}</h3></div>
               </div>
 
-              {/* [NEW] Agenda del Día with Actions */}
+              {/* Agenda del Día with Actions */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                   <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><Calendar size={18} className="text-blue-500"/> Agenda del Día ({new Date().toLocaleDateString()})</h3>
                   <div className="overflow-x-auto">
@@ -905,7 +885,7 @@ export default function App() {
                             <div className="flex-1 w-full space-y-2"><input type="text" value={staff.name} onChange={(e) => handleUpdateStaff(staff.id, 'name', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none font-bold text-slate-800" placeholder="Nombre"/><input type="text" value={staff.role} onChange={(e) => handleUpdateStaff(staff.id, 'role', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none text-sm text-slate-500" placeholder="Rol"/><input type="text" value={staff.image} onChange={(e) => handleUpdateStaff(staff.id, 'image', e.target.value)} className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-400 outline-none focus:border-slate-400" placeholder="URL Foto de Perfil"/></div>
                             <button onClick={() => { setStaffData(staffData.filter(s => s.id !== staff.id)) }} className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
                         </div>
-                        {/* [NEW] Staff Schedule Config UI */}
+                        {/* Staff Schedule Config UI */}
                         <div className="border-t border-slate-200 pt-2 flex flex-wrap gap-4 text-sm items-center">
                             <span className="font-bold text-slate-500 text-xs uppercase">Horario:</span>
                             <div className="flex items-center gap-1">
@@ -981,7 +961,6 @@ export default function App() {
           <div className="hidden md:flex items-center gap-8"><a href="#" onClick={(e) => handleNavClick(e, 'top')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Inicio</a><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Servicios</a><a href="#store" onClick={(e) => handleNavClick(e, 'store')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Tienda</a><a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Portafolio</a><a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Reseñas</a><button onClick={() => setView('login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? `${getColorClass('bg')} text-white` : 'bg-white text-slate-900'}`}><User size={16} /> Soy Staff</button></div>
           <button className={`md:hidden p-2 rounded-md ${scrolled ? 'text-slate-800' : 'text-white'}`} onClick={() => setIsMenuOpen(!isMenuOpen)}><Menu size={28} /></button>
         </div>
-        {/* Mobile Menu Dropdown Restored */}
         {isMenuOpen && (
           <div className="md:hidden absolute top-full left-0 w-full bg-white shadow-xl border-t border-gray-100 flex flex-col p-4 animate-in slide-in-from-top-5 z-50">
             <a href="#" onClick={(e) => handleNavClick(e, 'top')} className="text-slate-600 font-semibold p-3 hover:bg-slate-50 rounded-lg">Inicio</a>
@@ -1020,7 +999,6 @@ export default function App() {
         </div>
       </section>
 
-      {/* STORE SECTION (PUBLIC) */}
       <section id="store" className="py-24 bg-white border-t border-slate-100">
         <div className="container mx-auto px-4 md:px-8">
             <div className="text-center mb-16">
@@ -1054,7 +1032,6 @@ export default function App() {
         </div>
       </section>
 
-      {/* PORTFOLIO SECTION (PUBLIC - CATEGORIZED BY SECTIONS) */}
       <section id="portfolio" className="py-24 bg-slate-50 border-t border-slate-100">
         <div className="container mx-auto px-4 md:px-8">
             <div className="text-center mb-16">
@@ -1065,16 +1042,13 @@ export default function App() {
             <div className="space-y-16">
                 {portfolioCategories.map((category) => {
                     const categoryItems = portfolioData.filter(item => item.category === category);
-                    
                     if (categoryItems.length === 0) return null;
-
                     return (
                         <div key={category} className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                             <div className="flex items-center gap-4 mb-8">
                                 <h3 className="text-2xl md:text-3xl font-bold text-slate-800 uppercase tracking-tight">{category}</h3>
                                 <div className="h-px bg-slate-200 flex-grow"></div>
                             </div>
-                            
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                                 {categoryItems.map(item => (
                                     <div key={item.id} className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300">
@@ -1100,7 +1074,6 @@ export default function App() {
             <div key={review.id} className="min-w-[300px] md:min-w-[400px] bg-slate-50 p-8 rounded-2xl border border-slate-100 shadow-sm snap-center flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                     <div className="flex gap-1 text-yellow-400">{[...Array(review.rating)].map((_, i) => <Star key={i} fill="currentColor" size={16}/>)}</div>
-                    {/* Customer Photo in Review */}
                     {review.image && <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm"><img src={review.image} className="w-full h-full object-cover"/></div>}
                 </div>
                 <p className="text-slate-600 italic mb-6 leading-relaxed flex-grow">"{review.comment}"</p>
@@ -1122,7 +1095,6 @@ export default function App() {
                     <button key={idx} disabled={!hasSlots} onClick={() => setSelectedDate(day.fullDate)} className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${selectedDate === day.fullDate ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50 text-${config.primaryColor}-700 shadow-md scale-105` : !hasSlots ? 'bg-slate-50 border-slate-50 opacity-50 cursor-not-allowed' : 'border-slate-100 text-slate-500 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{day.dayName}</span><span className="text-2xl font-bold">{day.dayNumber}</span></button>
                   );
               })}</div></div>{selectedDate && (<div className="animate-in fade-in slide-in-from-bottom-2 duration-300"><label className="block text-sm font-bold text-slate-700 mb-3">Horario con {selectedStaff.name.split(' ')[0]}</label><div className="grid grid-cols-4 gap-3">{getStaffSlots(selectedStaff, weekDays.find(d=>d.fullDate===selectedDate)).map((time) => {
-                  // [NEW] Check availability
                   const available = isSlotAvailable(selectedStaff.id, selectedDate, time);
                   return (
                     <button key={time} disabled={!available} onClick={() => setSelectedTime(time)} className={`py-2 rounded-lg text-sm font-semibold transition-all ${selectedTime === time ? `${getColorClass('bg')} text-white shadow-md transform scale-105` : !available ? 'bg-red-50 text-red-300 cursor-not-allowed line-through' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{time}</button>
@@ -1131,12 +1103,7 @@ export default function App() {
               {step === 3 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><div className="space-y-3"><label className="font-bold text-slate-700">Nombre</label><input type="text" value={clientData.name} onChange={(e) => setClientData({...clientData, name: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: Juan Pérez"/></div><div className="space-y-3"><label className="font-bold text-slate-700">WhatsApp</label><input type="tel" value={clientData.phone} onChange={(e) => setClientData({...clientData, phone: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: 11 1234 5678"/></div></div>)}
               {step === 4 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-2">Método de Pago</h4><button onClick={() => setPaymentMethod('mp')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'mp' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><CreditCard size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Mercado Pago / Tarjeta</p><p className="text-xs text-green-600 font-bold">¡Ahorras 5% pagando ahora!</p></div></div><div className="text-right"><p className="text-xs text-slate-400 line-through">${selectedService.price}</p><p className="font-bold text-blue-600">${selectedService.price * 0.95}</p></div></button><button onClick={() => setPaymentMethod('cash')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'cash' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600"><DollarSign size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Efectivo en el local</p><p className="text-xs text-slate-500">Pagas el total al asistir</p></div></div><p className="font-bold text-slate-700">${selectedService.price}</p></button></div>)}
               {step === 5 && (<div className="text-center py-8 animate-in zoom-in duration-300"><div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100"><CheckCircle size={48} /></div><h3 className="text-2xl font-bold text-slate-900 mb-2">¡Turno Confirmado!</h3><div className="bg-slate-50 p-6 rounded-2xl text-left space-y-3 mb-6 border border-slate-100 shadow-sm relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${getColorClass('bg')}`}></div><div className="flex justify-between items-center"><span className="text-slate-500 text-sm">Profesional</span><span className="font-bold text-slate-900 flex items-center gap-2">{selectedStaff.name}</span></div><div className="flex justify-between"><span className="text-slate-500 text-sm">Fecha</span><span className="font-bold text-slate-900">{selectedDate} - {selectedTime} hs</span></div><div className="flex justify-between border-t border-slate-200 pt-3 mt-2"><span className="font-bold text-slate-900">Total {paymentMethod === 'mp' ? '(con dcto.)' : ''}</span><span className={`font-bold ${getColorClass('text')}`}>$ {paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}</span></div></div>
-              
-              {/* WhatsApp Confirmation Button */}
-              <button onClick={handleWhatsAppConfirm} className="w-full bg-green-500 text-white py-3.5 rounded-xl font-bold hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2 mb-3">
-                  <MessageCircle size={20} /> Recibir confirmación en WhatsApp
-              </button>
-              
+              <button onClick={handleWhatsAppConfirm} className="w-full bg-green-500 text-white py-3.5 rounded-xl font-bold hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2 mb-3"><MessageCircle size={20} /> Recibir confirmación en WhatsApp</button>
               <button onClick={() => setBookingModalOpen(false)} className="w-full bg-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-300 transition">Cerrar</button></div>)}
             </div>
             {step < 5 && (<div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">{step > 1 && <button onClick={() => setStep(step - 1)} className="px-6 py-3.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-white transition">Atrás</button>}{step === 1 && <button disabled={!selectedStaff} onClick={() => setStep(2)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 2 && <button disabled={!selectedDate || !selectedTime} onClick={() => setStep(3)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Siguiente <ChevronRight size={18}/></button>}{step === 3 && <button disabled={!clientData.name || !clientData.phone} onClick={() => setStep(4)} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Ir al Pago <ChevronRight size={18}/></button>}{step === 4 && <button disabled={!paymentMethod} onClick={handleBookingSubmit} className={`flex-1 ${getColorClass('bg')} disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-bold transition flex justify-center items-center gap-2 shadow-lg`}>Confirmar Reserva <CheckCircle size={18}/></button>}</div>)}
@@ -1149,8 +1116,6 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12 text-sm">
             <div><div className="flex items-center gap-2 text-white mb-4"><div className={`${getColorClass('bg')} p-1.5 rounded-lg`}><Scissors size={18}/></div><span className="font-bold text-lg">{config.businessName}</span></div><p>Solución integral para gestión de citas.</p></div>
             <div><h4 className="text-white font-bold mb-4">Contacto</h4><ul className="space-y-2"><li className="flex items-center gap-2"><MapPin size={16}/> Salta, Argentina</li><li className="flex items-center gap-2"><Mail size={16}/> contacto@sistema.com</li></ul></div>
-            
-            {/* Redes Sociales Dinámicas */}
             <div>
                 <h4 className="text-white font-bold mb-4">Síguenos</h4>
                 <div className="flex gap-3">
@@ -1159,7 +1124,6 @@ export default function App() {
                     {config.socialWhatsapp && <a href={`https://wa.me/${config.socialWhatsapp}`} target="_blank" rel="noreferrer" className="bg-slate-800 p-2 rounded-lg hover:bg-green-600 hover:text-white transition"><MessageCircle size={18}/></a>}
                 </div>
             </div>
-
             <div><button onClick={() => setView('login')} className="bg-slate-800 text-white w-full py-3 rounded-lg font-bold border border-slate-700 hover:border-slate-500 transition">Acceso Admin / Staff</button></div>
           </div>
           <p className="text-center text-xs text-slate-600 border-t border-slate-800 pt-8">© 2024 Sistema de Turnos.</p>
