@@ -156,13 +156,14 @@ export default function App() {
   const [newCatName, setNewCatName] = useState(""); 
 
   const reviewsRef = useRef(null);
-    const SHOP_ID = 'default';
+  const SHOP_ID = 'default';
 
   const [fbUser, setFbUser] = useState(null);
   const isAdmin = !!fbUser;
 
   // Evita loop: snapshot -> setState -> save -> snapshot
   const lastRemoteRef = useRef('');
+
   useEffect(() => {
     if (!firebaseEnabled) return;
     return onAuthStateChanged(auth, (user) => setFbUser(user));
@@ -186,8 +187,18 @@ export default function App() {
     }
   };
 
+  // ✅ FIX 1: Scroll listener SIEMPRE (con o sin Firebase)
   useEffect(() => {
-    if (!firebaseEnabled) {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    handleScroll(); // inicializa al cargar
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ✅ FIX 2: Cargar localStorage SOLO si Firebase NO está activo
+  useEffect(() => {
+    if (firebaseEnabled) return;
+
     const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
     const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
     const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
@@ -196,12 +207,9 @@ export default function App() {
     const savedPortfolio = localStorage.getItem('appPortfolio'); if (savedPortfolio) setPortfolioData(JSON.parse(savedPortfolio));
     const savedProducts = localStorage.getItem('appProducts'); if (savedProducts) setProductsData(JSON.parse(savedProducts));
     const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(JSON.parse(savedPortCats));
-
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-    useEffect(() => {
+
+  useEffect(() => {
     if (!firebaseEnabled) return;
 
     const shopRef = doc(db, 'shops', SHOP_ID);
@@ -256,6 +264,7 @@ export default function App() {
       setPortfolioCategories(payload.portfolioCategories);
     });
   }, [isAdmin]);
+
   useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
 
@@ -270,7 +279,8 @@ export default function App() {
       setAppointments(list);
     });
   }, [isAdmin]);
-    useEffect(() => {
+
+  useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
 
     const payload = {
@@ -297,15 +307,46 @@ export default function App() {
   }, [isAdmin, config, staffData, servicesData, reviewsData, portfolioData, productsData, portfolioCategories]);
 
 
+  // ✅ FIX 3: Guardar localStorage SOLO si Firebase NO está activo
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appointments', JSON.stringify(appointments)); 
+  }, [appointments]);
 
-  useEffect(() => { localStorage.setItem('appointments', JSON.stringify(appointments)); }, [appointments]);
-  useEffect(() => { localStorage.setItem('appConfig', JSON.stringify(config)); }, [config]);
-  useEffect(() => { localStorage.setItem('appStaff', JSON.stringify(staffData)); }, [staffData]);
-  useEffect(() => { localStorage.setItem('appServices', JSON.stringify(servicesData)); }, [servicesData]);
-  useEffect(() => { localStorage.setItem('appReviews', JSON.stringify(reviewsData)); }, [reviewsData]);
-  useEffect(() => { localStorage.setItem('appPortfolio', JSON.stringify(portfolioData)); }, [portfolioData]);
-  useEffect(() => { localStorage.setItem('appProducts', JSON.stringify(productsData)); }, [productsData]);
-  useEffect(() => { localStorage.setItem('appPortfolioCats', JSON.stringify(portfolioCategories)); }, [portfolioCategories]);
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appConfig', JSON.stringify(config)); 
+  }, [config]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appStaff', JSON.stringify(staffData)); 
+  }, [staffData]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appServices', JSON.stringify(servicesData)); 
+  }, [servicesData]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appReviews', JSON.stringify(reviewsData)); 
+  }, [reviewsData]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appPortfolio', JSON.stringify(portfolioData)); 
+  }, [portfolioData]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appProducts', JSON.stringify(productsData)); 
+  }, [productsData]);
+
+  useEffect(() => { 
+    if (firebaseEnabled) return;
+    localStorage.setItem('appPortfolioCats', JSON.stringify(portfolioCategories)); 
+  }, [portfolioCategories]);
 
   const getColorClass = (type) => {
     const colors = {
@@ -377,7 +418,7 @@ export default function App() {
     return { totalRevenue, todayRevenue, weeklyRevenue, monthlyRevenue, totalAppointments: appointments.length, dailyAppointments, weeklyAppointments, monthlyAppointments, staffDailyCounts, staffPerformance, salesComparison, topServices, busyHours, nextApp: futureApps[0] || null };
   }, [appointments, staffData, config.primaryColor]);
 
-    const handleLogin = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
     // Fallback: si Firebase no está configurado, conserva tu login actual
@@ -412,42 +453,42 @@ export default function App() {
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
   const handleBookingSubmit = async () => {
-  let finalPrice = selectedService.price;
-  if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
+    let finalPrice = selectedService.price;
+    if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
 
-  const newAppointment = {
-    serviceId: selectedService.id,
-    serviceTitle: selectedService.title,
-    staffId: selectedStaff.id,
-    staffName: selectedStaff.name,
-    price: finalPrice,
-    originalPrice: selectedService.price,
-    date: selectedDate,
-    time: selectedTime,
-    clientName: clientData.name,
-    clientPhone: clientData.phone,
-    paymentMethod,
-    status: 'Confirmado',
-    createdAt: new Date().toISOString(),
-  };
+    const newAppointment = {
+      serviceId: selectedService.id,
+      serviceTitle: selectedService.title,
+      staffId: selectedStaff.id,
+      staffName: selectedStaff.name,
+      price: finalPrice,
+      originalPrice: selectedService.price,
+      date: selectedDate,
+      time: selectedTime,
+      clientName: clientData.name,
+      clientPhone: clientData.phone,
+      paymentMethod,
+      status: 'Confirmado',
+      createdAt: new Date().toISOString(),
+    };
 
-  try {
-    if (firebaseEnabled) {
-      await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), {
-        ...newAppointment,
-        createdAtTS: serverTimestamp(),
-      });
-    } else {
-      // fallback local si Firebase no está activo
+    try {
+      if (firebaseEnabled) {
+        await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), {
+          ...newAppointment,
+          createdAtTS: serverTimestamp(),
+        });
+      } else {
+        // fallback local si Firebase no está activo
+        setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
+      }
+    } catch (err) {
+      // fallback local si falló Firebase por cualquier razón
       setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
     }
-  } catch (err) {
-    // fallback local si falló Firebase por cualquier razón
-    setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
-  }
 
-  setStep(5);
-};
+    setStep(5);
+  };
 
 
   const handleWhatsAppConfirm = () => {
