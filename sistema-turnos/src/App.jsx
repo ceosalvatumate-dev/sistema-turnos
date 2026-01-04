@@ -71,6 +71,32 @@ const ensureStaffSchedule = (staffObj) => {
   return { ...base, schedule: normalized };
 };
 
+
+// --- Robust parsing & normalization (prevents blank screen if remote/local data is missing keys) ---
+const safeParseJSON = (str, fallback = null) => {
+  try { return JSON.parse(str); } catch { return fallback; }
+};
+
+const asArray = (val, fallback = []) => (Array.isArray(val) ? val : fallback);
+
+const normalizeConfig = (cfg) => {
+  const merged = { ...INITIAL_CONFIG, ...(cfg || {}) };
+  const allowed = new Set(['blue', 'indigo', 'purple', 'rose', 'slate']);
+  if (!allowed.has(merged.primaryColor)) merged.primaryColor = 'blue';
+  return merged;
+};
+
+const normalizeStaffList = (list) => asArray(list, INITIAL_STAFF).map(ensureStaffSchedule);
+const normalizeServicesList = (list) => asArray(list, INITIAL_SERVICES);
+const normalizeReviewsList = (list) => asArray(list, INITIAL_REVIEWS);
+const normalizePortfolioList = (list) => asArray(list, INITIAL_PORTFOLIO);
+const normalizeProductsList = (list) => asArray(list, INITIAL_PRODUCTS);
+
+const normalizePortfolioCategories = (list) => {
+  const arr = asArray(list, INITIAL_PORTFOLIO_CATS);
+  return arr.length ? arr : INITIAL_PORTFOLIO_CATS;
+};
+
 const dateToWeekKey = (dateStr) => {
   try {
     const d = new Date(`${dateStr}T00:00:00`);
@@ -273,14 +299,14 @@ export default function App() {
   useEffect(() => {
     if (firebaseEnabled) return;
 
-    const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
-    const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
-    const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
-    const savedServices = localStorage.getItem('appServices'); if (savedServices) setServicesData(JSON.parse(savedServices));
-    const savedReviews = localStorage.getItem('appReviews'); if (savedReviews) setReviewsData(JSON.parse(savedReviews));
-    const savedPortfolio = localStorage.getItem('appPortfolio'); if (savedPortfolio) setPortfolioData(JSON.parse(savedPortfolio));
-    const savedProducts = localStorage.getItem('appProducts'); if (savedProducts) setProductsData(JSON.parse(savedProducts));
-    const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(JSON.parse(savedPortCats));
+    const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(asArray(safeParseJSON(savedApps, []), []));
+    const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(normalizeConfig(safeParseJSON(savedConfig, {})));
+    const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(normalizeStaffList(safeParseJSON(savedStaff, [])));
+    const savedServices = localStorage.getItem('appServices'); if (savedServices) setServicesData(normalizeServicesList(safeParseJSON(savedServices, [])));
+    const savedReviews = localStorage.getItem('appReviews'); if (savedReviews) setReviewsData(normalizeReviewsList(safeParseJSON(savedReviews, [])));
+    const savedPortfolio = localStorage.getItem('appPortfolio'); if (savedPortfolio) setPortfolioData(normalizePortfolioList(safeParseJSON(savedPortfolio, [])));
+    const savedProducts = localStorage.getItem('appProducts'); if (savedProducts) setProductsData(normalizeProductsList(safeParseJSON(savedProducts, [])));
+    const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(normalizePortfolioCategories(safeParseJSON(savedPortCats, [])));
   }, []);
 
   useEffect(() => {
@@ -295,14 +321,14 @@ export default function App() {
       if (!snap.exists()) {
         if (isAdmin) {
           const payload = {
-            config,
-            staffData,
-            servicesData,
-            reviewsData,
-            portfolioData,
-            productsData,
-            portfolioCategories,
-          };
+          config: normalizeConfig(config),
+          staffData: normalizeStaffList(staffData),
+          servicesData: normalizeServicesList(servicesData),
+          reviewsData: normalizeReviewsList(reviewsData),
+          portfolioData: normalizePortfolioList(portfolioData),
+          productsData: normalizeProductsList(productsData),
+          portfolioCategories: normalizePortfolioCategories(portfolioCategories),
+        };
           await setDoc(shopRef, payload, { merge: true });
           lastRemoteRef.current = JSON.stringify(payload);
         }
@@ -312,13 +338,13 @@ export default function App() {
       const data = snap.data();
 
       const payload = {
-        config: data.config ?? config,
-        staffData: (data.staffData ? data.staffData.map(ensureStaffSchedule) : staffData.map(ensureStaffSchedule)),
-        servicesData: data.servicesData ?? servicesData,
-        reviewsData: data.reviewsData ?? reviewsData,
-        portfolioData: data.portfolioData ?? portfolioData,
-        productsData: data.productsData ?? productsData,
-        portfolioCategories: data.portfolioCategories ?? portfolioCategories,
+        config: normalizeConfig((data.config ?? config)),
+        staffData: normalizeStaffList((data.staffData ?? staffData)),
+        servicesData: normalizeServicesList((data.servicesData ?? servicesData)),
+        reviewsData: normalizeReviewsList((data.reviewsData ?? reviewsData)),
+        portfolioData: normalizePortfolioList((data.portfolioData ?? portfolioData)),
+        productsData: normalizeProductsList((data.productsData ?? productsData)),
+        portfolioCategories: normalizePortfolioCategories((data.portfolioCategories ?? portfolioCategories)),
       };
 
       lastRemoteRef.current = JSON.stringify({
@@ -460,7 +486,8 @@ useEffect(() => {
       rose: { bg: 'bg-rose-600', text: 'text-rose-600', hover: 'hover:bg-rose-700', light: 'bg-rose-50', border: 'border-rose-600', ring: 'focus:ring-rose-500', shadow: 'shadow-rose-500/20', bar: 'bg-rose-500' },
       slate: { bg: 'bg-slate-800', text: 'text-slate-800', hover: 'hover:bg-slate-900', light: 'bg-slate-100', border: 'border-slate-800', ring: 'focus:ring-slate-500', shadow: 'shadow-slate-500/20', bar: 'bg-slate-700' },
     };
-    return colors[config.primaryColor][type];
+    const theme = colors[config?.primaryColor] || colors.blue;
+    return theme[type];
   };
 
   const clientsData = useMemo(() => {
