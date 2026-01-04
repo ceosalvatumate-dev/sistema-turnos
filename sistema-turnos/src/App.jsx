@@ -14,8 +14,18 @@ import {
 import { auth, db, firebaseEnabled } from './firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
-  doc, setDoc, onSnapshot,
-  collection, addDoc, query, orderBy, serverTimestamp
+  doc,
+  setDoc,
+  onSnapshot,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  serverTimestamp,
+  runTransaction,
+  getDoc,
+  updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
 
@@ -29,6 +39,58 @@ import {
 
 // --- DATOS INICIALES ---
 
+
+// --- HORARIOS DE TRABAJO (POR PROFESIONAL) ---
+// Estructura:
+// schedule: { mon:{enabled,start,end}, tue:{...}, ... }  (horario en formato 'HH:MM')
+const WEEK_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const WEEK_LABELS = { sun: 'Dom', mon: 'Lun', tue: 'Mar', wed: 'Mié', thu: 'Jue', fri: 'Vie', sat: 'Sáb' };
+
+const makeDefaultSchedule = () => ({
+  mon: { enabled: true, start: '09:00', end: '20:00' },
+  tue: { enabled: true, start: '09:00', end: '20:00' },
+  wed: { enabled: true, start: '09:00', end: '20:00' },
+  thu: { enabled: true, start: '09:00', end: '20:00' },
+  fri: { enabled: true, start: '09:00', end: '20:00' },
+  sat: { enabled: true, start: '09:00', end: '20:00' },
+  sun: { enabled: false, start: '09:00', end: '20:00' },
+});
+
+const ensureStaffSchedule = (staffObj) => {
+  const base = staffObj || {};
+  const schedule = base.schedule && typeof base.schedule === 'object' ? base.schedule : makeDefaultSchedule();
+  // Normaliza keys y valores
+  const normalized = { ...makeDefaultSchedule(), ...schedule };
+  WEEK_KEYS.forEach((k) => {
+    if (!normalized[k]) normalized[k] = makeDefaultSchedule()[k];
+    if (typeof normalized[k].enabled !== 'boolean') normalized[k].enabled = !!normalized[k].enabled;
+    if (!normalized[k].start) normalized[k].start = '09:00';
+    if (!normalized[k].end) normalized[k].end = '20:00';
+  });
+
+  return { ...base, schedule: normalized };
+};
+
+const dateToWeekKey = (dateStr) => {
+  try {
+    const d = new Date(`${dateStr}T00:00:00`);
+    return WEEK_KEYS[d.getDay()];
+  } catch {
+    return 'mon';
+  }
+};
+
+const timeToMinutes = (t) => {
+  const [h, m] = (t || '00:00').split(':').map((x) => parseInt(x, 10));
+  return (h * 60) + (m || 0);
+};
+
+const minutesToTime = (mins) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
 const INITIAL_CONFIG = {
   businessName: "Barbería Premium",
   logoUrl: "", 
@@ -40,10 +102,11 @@ const INITIAL_CONFIG = {
 };
 
 const INITIAL_STAFF = [
-  { id: 1, name: "Juan Pérez", role: "Master Barber", image: "https://images.unsplash.com/photo-1581803118522-7b72a50f7e9f?q=80&w=200&auto=format&fit=crop" },
-  { id: 2, name: "Ana Gomez", role: "Estilista Senior", image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop" },
-  { id: 3, name: "Carlos Ruiz", role: "Barbero", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop" }
+  { id: 1, name: "Juan Pérez", role: "Master Barber", image: "https://images.unsplash.com/photo-1581803118522-7b72a50f7e9f?q=80&w=200&auto=format&fit=crop", pin: "1111", schedule: makeDefaultSchedule() },
+  { id: 2, name: "Ana Gomez", role: "Estilista Senior", image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop", pin: "2222", schedule: makeDefaultSchedule() },
+  { id: 3, name: "Carlos Ruiz", role: "Barbero", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200&auto=format&fit=crop", pin: "3333", schedule: makeDefaultSchedule() }
 ];
+
 
 const INITIAL_PRODUCTS = [
   { id: 1, product: "Cera Mate Strong", price: 2500, stock: 15, unit: "unidades", image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=500" },
@@ -127,7 +190,7 @@ const exportToCSV = (data, filename) => {
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
   const [config, setConfig] = useState(INITIAL_CONFIG);
-  const [staffData, setStaffData] = useState(INITIAL_STAFF);
+  const [staffData, setStaffData] = useState(INITIAL_STAFF.map(ensureStaffSchedule));
   const [servicesData, setServicesData] = useState(INITIAL_SERVICES);
   const [reviewsData, setReviewsData] = useState(INITIAL_REVIEWS);
   const [portfolioData, setPortfolioData] = useState(INITIAL_PORTFOLIO);
@@ -151,6 +214,15 @@ export default function App() {
   const [clientData, setClientData] = useState({ name: '', phone: '' });
 
   const [appointments, setAppointments] = useState([]);
+  const [bookingError, setBookingError] = useState('');
+  const [busySlots, setBusySlots] = useState(new Set());
+  const [selectedStaffIdForAgenda, setSelectedStaffIdForAgenda] = useState('all');
+  const [agendaDate, setAgendaDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [expandedStaffId, setExpandedStaffId] = useState(null);
+  const [staffLoginData, setStaffLoginData] = useState({ staffId: '', pin: '' });
+  const [staffUser, setStaffUser] = useState(null);
+  const [staffLoginError, setStaffLoginError] = useState('');
+  const [staffAppointments, setStaffAppointments] = useState([]);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [newCatName, setNewCatName] = useState(""); 
@@ -163,6 +235,8 @@ export default function App() {
 
   // Evita loop: snapshot -> setState -> save -> snapshot
   const lastRemoteRef = useRef('');
+  const shopHydratedRef = useRef(false);
+  const busyMigratedRef = useRef(false);
 
   useEffect(() => {
     if (!firebaseEnabled) return;
@@ -215,6 +289,8 @@ export default function App() {
     const shopRef = doc(db, 'shops', SHOP_ID);
 
     return onSnapshot(shopRef, async (snap) => {
+      shopHydratedRef.current = true;
+
       // Si no existe el doc aún, lo crea el admin automáticamente
       if (!snap.exists()) {
         if (isAdmin) {
@@ -237,7 +313,7 @@ export default function App() {
 
       const payload = {
         config: data.config ?? config,
-        staffData: data.staffData ?? staffData,
+        staffData: (data.staffData ? data.staffData.map(ensureStaffSchedule) : staffData.map(ensureStaffSchedule)),
         servicesData: data.servicesData ?? servicesData,
         reviewsData: data.reviewsData ?? reviewsData,
         portfolioData: data.portfolioData ?? portfolioData,
@@ -268,6 +344,9 @@ export default function App() {
   useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
 
+    // Evita sobrescribir el doc remoto con valores iniciales antes de hidratar desde Firestore
+    if (!shopHydratedRef.current) return;
+
     const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
     const q = query(appsRef, orderBy('createdAtTS', 'desc'));
 
@@ -277,11 +356,36 @@ export default function App() {
         return { id: d.id, ...rest };
       });
       setAppointments(list);
+
+        // Migra/crea busy docs una sola vez (para bloquear horarios de citas existentes)
+        if (!busyMigratedRef.current) {
+          busyMigratedRef.current = true;
+          syncBusyDocsFromAppointments(list).catch(() => {});
+        }
     });
   }, [isAdmin]);
 
+
+// Citas para profesionales (solo su agenda). Mantiene privacidad: se filtra localmente por staffId.
+useEffect(() => {
+  if (!firebaseEnabled || !staffUser) return;
+
+  const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
+  const q = query(appsRef, orderBy('createdAtTS', 'desc'));
+
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => {
+      const { createdAtTS, ...rest } = d.data();
+      return { id: d.id, ...rest };
+    });
+    setStaffAppointments(list);
+  });
+}, [staffUser?.id]);
   useEffect(() => {
     if (!firebaseEnabled || !isAdmin) return;
+
+    // Evita sobrescribir el doc remoto con valores iniciales antes de hidratar desde Firestore
+    if (!shopHydratedRef.current) return;
 
     const payload = {
       config,
@@ -450,79 +554,275 @@ export default function App() {
   };
 
 
+const handleCancelAppointment = async (app) => {
+  try {
+    if (!firebaseEnabled) {
+      setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Cancelado' } : x)));
+      return;
+    }
+
+    const appRef = doc(db, 'shops', SHOP_ID, 'appointments', app.id);
+    const busyId = `${app.staffId}_${app.date}`;
+    const busyRef = doc(db, 'shops', SHOP_ID, 'busy', busyId);
+
+    await runTransaction(db, async (tx) => {
+      const busySnap = await tx.get(busyRef);
+      const busyData = busySnap.exists() ? busySnap.data() : {};
+      const slots = { ...(busyData.slots || {}) };
+
+      // Marcar slot como cancelado (libera el horario)
+      slots[app.time] = {
+        ...(slots[app.time] || {}),
+        status: 'Cancelado',
+        appointmentId: app.id,
+        staffId: app.staffId,
+        date: app.date,
+        time: app.time,
+        canceledAtTS: serverTimestamp(),
+        updatedAtTS: serverTimestamp(),
+      };
+
+      tx.set(busyRef, { slots, updatedAtTS: serverTimestamp() }, { merge: true });
+      tx.update(appRef, { status: 'Cancelado', updatedAtTS: serverTimestamp() });
+    });
+  } catch (e) {
+    // En caso de error, al menos cambia el estado local
+    setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Cancelado' } : x)));
+  }
+};
+
+const handleMarkAttended = async (app) => {
+  try {
+    if (!firebaseEnabled) {
+      setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Asistió' } : x)));
+      return;
+    }
+
+    const appRef = doc(db, 'shops', SHOP_ID, 'appointments', app.id);
+    await updateDoc(appRef, { status: 'Asistió', updatedAtTS: serverTimestamp() });
+  } catch (e) {
+    setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Asistió' } : x)));
+  }
+};
+
+const handleReconfirmAppointment = async (app) => {
+  try {
+    if (!firebaseEnabled) {
+      setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Confirmado' } : x)));
+      return;
+    }
+    const appRef = doc(db, 'shops', SHOP_ID, 'appointments', app.id);
+    await updateDoc(appRef, { status: 'Confirmado', updatedAtTS: serverTimestamp() });
+  } catch (e) {
+    setAppointments((prev) => prev.map((x) => (x.id === app.id ? { ...x, status: 'Confirmado' } : x)));
+  }
+};
+
+const handleProductOrderWhatsApp = (product) => {
+  const message = `Hola! Quiero pedir: ${product.product} (Precio: $${product.price}).\n\nQuisiera recogerlo en mi próxima cita. ¿Me confirmas disponibilidad?`;
+  const whatsappUrl = `https://wa.me/${config.socialWhatsapp}?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
+};
+
+
+const syncBusyDocsFromAppointments = async (list) => {
+  if (!firebaseEnabled) return;
+  if (!Array.isArray(list) || list.length === 0) return;
+
+  // Solo sincroniza citas NO canceladas
+  const active = list.filter((a) => (a.status || 'Confirmado') !== 'Cancelado');
+  if (active.length === 0) return;
+
+  const grouped = {};
+  active.forEach((a) => {
+    const key = `${a.staffId}_${a.date}`;
+    if (!grouped[key]) grouped[key] = { staffId: a.staffId, date: a.date, slots: {} };
+    grouped[key].slots[a.time] = {
+      status: a.status || 'Confirmado',
+      appointmentId: a.id,
+      staffId: a.staffId,
+      date: a.date,
+      time: a.time,
+      updatedAtTS: serverTimestamp(),
+    };
+  });
+
+  const batch = writeBatch(db);
+  Object.entries(grouped).forEach(([key, val]) => {
+    const ref = doc(db, 'shops', SHOP_ID, 'busy', key);
+    batch.set(
+      ref,
+      {
+        staffId: val.staffId,
+        date: val.date,
+        slots: val.slots,
+        updatedAtTS: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+
+  await batch.commit();
+};
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
 
-  const handleBookingSubmit = async () => {
-    let finalPrice = selectedService.price;
-    if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
 
-    const newAppointment = {
-      serviceId: selectedService.id,
-      serviceTitle: selectedService.title,
-      staffId: selectedStaff.id,
-      staffName: selectedStaff.name,
-      price: finalPrice,
-      originalPrice: selectedService.price,
-      date: selectedDate,
-      time: selectedTime,
-      clientName: clientData.name,
-      clientPhone: clientData.phone,
-      paymentMethod,
-      status: 'Confirmado',
-      createdAt: new Date().toISOString(),
-    };
+// --- BUSY SLOTS (PARA BLOQUEAR HORARIOS EN BOOKING, SIN LEER TODAS LAS CITAS) ---
+useEffect(() => {
+  setBookingError('');
+  setBusySlots(new Set());
+  if (!firebaseEnabled) return;
+  if (!selectedStaff || !selectedDate) return;
 
-    try {
-      if (firebaseEnabled) {
-        await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), {
+  const busyId = `${selectedStaff.id}_${selectedDate}`;
+  const busyRef = doc(db, 'shops', SHOP_ID, 'busy', busyId);
+
+  return onSnapshot(busyRef, (snap) => {
+    const slotsObj = snap.exists() ? (snap.data().slots || {}) : {};
+    const taken = new Set(
+      Object.entries(slotsObj)
+        .filter(([, v]) => (v?.status || 'Confirmado') !== 'Cancelado')
+        .map(([k]) => k)
+    );
+    setBusySlots(taken);
+  });
+}, [selectedStaff?.id, selectedDate]);
+
+// Reset de hora si cambias profesional / día
+useEffect(() => {
+  setSelectedTime(null);
+}, [selectedStaff?.id, selectedDate]);
+  
+const handleBookingSubmit = async () => {
+  setBookingError('');
+
+  let finalPrice = selectedService.price;
+  if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
+
+  const serviceMins = selectedService?.duration ? parseInt(selectedService.duration, 10) : 30;
+
+  const newAppointment = {
+    serviceId: selectedService.id,
+    serviceTitle: selectedService.title,
+    serviceDuration: serviceMins,
+    staffId: selectedStaff.id,
+    staffName: selectedStaff.name,
+    price: finalPrice,
+    originalPrice: selectedService.price,
+    date: selectedDate,
+    time: selectedTime,
+    clientName: clientData.name,
+    clientPhone: clientData.phone,
+    paymentMethod,
+    status: 'Confirmado',
+    createdAt: new Date().toISOString(),
+  };
+
+  // Validación UI extra (por si alguien manipuló el front)
+  if (isTimeDisabled(selectedTime)) {
+    setBookingError('Ese horario ya no está disponible. Elige otro por favor.');
+    setStep(2);
+    return;
+  }
+
+  try {
+    if (firebaseEnabled) {
+      // Transacción: bloquea horario + crea cita (evita dobles reservas simultáneas)
+      const appsCol = collection(db, 'shops', SHOP_ID, 'appointments');
+      const newRef = doc(appsCol);
+      const busyId = `${selectedStaff.id}_${selectedDate}`;
+      const busyRef = doc(db, 'shops', SHOP_ID, 'busy', busyId);
+
+      await runTransaction(db, async (tx) => {
+        const busySnap = await tx.get(busyRef);
+        const busyData = busySnap.exists() ? busySnap.data() : {};
+        const slots = { ...(busyData.slots || {}) };
+
+        const existing = slots[selectedTime];
+        const existingStatus = existing?.status || null;
+
+        // Si ya existe y NO está cancelado => está tomado
+        if (existing && existingStatus !== 'Cancelado') {
+          throw new Error('SLOT_TAKEN');
+        }
+
+        slots[selectedTime] = {
+          status: 'Confirmado',
+          appointmentId: newRef.id,
+          staffId: selectedStaff.id,
+          date: selectedDate,
+          time: selectedTime,
+          updatedAtTS: serverTimestamp(),
+        };
+
+        tx.set(
+          busyRef,
+          {
+            staffId: selectedStaff.id,
+            date: selectedDate,
+            slots,
+            updatedAtTS: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        tx.set(newRef, {
           ...newAppointment,
           createdAtTS: serverTimestamp(),
+          updatedAtTS: serverTimestamp(),
         });
-      } else {
-        // fallback local si Firebase no está activo
-        setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
-      }
-    } catch (err) {
-      // fallback local si falló Firebase por cualquier razón
+      });
+    } else {
+      // fallback local si Firebase no está activo
       setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
     }
 
     setStep(5);
-  };
+  } catch (err) {
+    if (String(err?.message || '').includes('SLOT_TAKEN')) {
+      setBookingError('Ese horario ya fue tomado. Elige otro por favor.');
+      setStep(2);
+      return;
+    }
 
-
-  const handleWhatsAppConfirm = () => {
-    const message = `Hola! Soy ${clientData.name}. Quiero confirmar mi turno para ${selectedService.title} con ${selectedStaff.name} el día ${selectedDate} a las ${selectedTime}. Precio: $${paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}.`;
-    const whatsappUrl = `https://wa.me/${config.socialWhatsapp}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
-  const handleUpdateConfig = (newSettings) => { setConfig({...config, ...newSettings}); }
-  const handleAddStaff = () => { setStaffData([...staffData, { id: Date.now(), name: "Nuevo Personal", role: "Estilista", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200" }]); }
-  const handleUpdateStaff = (id, field, value) => { setStaffData(staffData.map(s => s.id === id ? { ...s, [field]: value } : s)); }
-  const handleAddService = () => { setServicesData([...servicesData, { id: Date.now(), title: "Nuevo Servicio", category: ["General"], price: 0, duration: 30, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=200", description: "Descripción del servicio" }]); }
-  const handleDeleteService = (id) => { setServicesData(servicesData.filter(s => s.id !== id)); }
-  const handleUpdateService = (id, field, value) => { setServicesData(servicesData.map(s => s.id === id ? { ...s, [field]: value } : s)); }
-  const handleAddReview = () => { setReviewsData([{ id: Date.now(), user: "Cliente Nuevo", rating: 5, comment: "Comentario...", image: "" }, ...reviewsData]); }
-  const handleDeleteReview = (id) => { setReviewsData(reviewsData.filter(r => r.id !== id)); }
-  const handleUpdateReview = (id, field, value) => { setReviewsData(reviewsData.map(r => r.id === id ? { ...r, [field]: value } : r)); }
-  
-  const handleAddPortfolio = () => { setPortfolioData([{ id: Date.now(), image: "https://images.unsplash.com/photo-1605497788044-5a32c7078486?q=80&w=800", category: portfolioCategories[0], title: "Nuevo Trabajo" }, ...portfolioData]); }
-  const handleDeletePortfolio = (id) => { setPortfolioData(portfolioData.filter(p => p.id !== id)); }
-  const handleUpdatePortfolio = (id, field, value) => { setPortfolioData(portfolioData.map(p => p.id === id ? { ...p, [field]: value } : p)); }
-  
-  const handleAddCategory = () => { if(newCatName && !portfolioCategories.includes(newCatName)) { setPortfolioCategories([...portfolioCategories, newCatName]); setNewCatName(""); } }
-  const handleDeleteCategory = (cat) => { setPortfolioCategories(portfolioCategories.filter(c => c !== cat)); }
-
-  const handleAddProduct = () => { 
-    const newProduct = { id: Date.now().toString() + Math.random().toString(36).substr(2, 9), product: "Nuevo Producto", price: 0, stock: 0, unit: "unidades", image: "https://images.unsplash.com/photo-1599351431202-6e0000a94376?q=80&w=500" };
-    setProductsData(prev => [newProduct, ...prev]); 
+    // fallback local si falló Firebase por cualquier razón
+    setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
+    setStep(5);
   }
-  const handleDeleteProduct = (id) => { setProductsData(prev => prev.filter(p => p.id !== id)); }
-  const handleUpdateProduct = (id, field, value) => { setProductsData(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p)); }
+};
 
-  const filteredServices = activeCategory === "Todos" ? servicesData : servicesData.filter(service => service.category.includes(activeCategory));
-  const weekDays = getNextDays();
+const isTimeDisabled = (timeStr) => {
+  if (!selectedStaff || !selectedDate) return true;
+
+  // 1) Validar horario laboral del profesional
+  const day = getStaffDaySchedule(selectedStaff, selectedDate);
+  if (!day.enabled) return true;
+
+  const serviceMins = selectedService?.duration ? parseInt(selectedService.duration, 10) : 30;
+  const t0 = timeToMinutes(timeStr);
+  const start = timeToMinutes(day.start);
+  const end = timeToMinutes(day.end);
+
+  // Debe iniciar dentro del rango y terminar antes o igual al fin
+  if (t0 < start) return true;
+  if (t0 + serviceMins > end) return true;
+
+  // 2) Bloqueo por cita existente (busySlots de Firestore)
+  if (busySlots?.has(timeStr)) return true;
+
+  return false;
+};
+
+  // Auto-limpia la hora si se vuelve no disponible (por ejemplo, otra persona reservó antes)
+  useEffect(() => {
+    if (!selectedTime) return;
+    try {
+      if (isTimeDisabled(selectedTime)) setSelectedTime(null);
+    } catch {
+      // ignore
+    }
+  }, [busySlots, selectedStaff?.id, selectedDate, selectedService?.id]);
+
 
   // --- VIEW: LOGIN ---
   if (view === 'login') {
@@ -563,6 +863,7 @@ export default function App() {
           <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
             <p className="px-4 text-xs font-bold text-slate-500 uppercase mb-2 hidden md:block">Gestión</p>
             <button onClick={() => setDashboardView('overview')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'overview' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={20} /> <span className="hidden md:block">Inicio</span></button>
+            <button onClick={() => setDashboardView('agenda')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'agenda' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><CalendarRange size={20} /> <span className="hidden md:block">Agenda</span></button>
             <button onClick={() => setDashboardView('clients')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'clients' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><Users size={20} /> <span className="hidden md:block">Clientes</span></button>
             <button onClick={() => setDashboardView('store')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'store' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><ShoppingBag size={20} /> <span className="hidden md:block">Tienda / Stock</span></button>
             <button onClick={() => setDashboardView('portfolio')} className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all ${dashboardView === 'portfolio' ? `${getColorClass('bg')} text-white shadow-lg` : 'text-slate-400 hover:bg-slate-800'}`}><Camera size={20} /> <span className="hidden md:block">Portafolio</span></button>
@@ -749,7 +1050,72 @@ export default function App() {
               {/* Staff Management */}
               <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4 mb-4"><h3 className="text-lg font-bold text-slate-800">Profesionales</h3><button onClick={handleAddStaff} className={`text-sm ${getColorClass('text')} font-bold flex items-center gap-1`}><PlusCircle size={16}/> Agregar</button></div>
-                <div className="grid gap-4">{staffData.map(staff => (<div key={staff.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50/50"><div className="relative group w-16 h-16 shrink-0"><img src={staff.image} className="w-full h-full rounded-full object-cover"/><div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><Upload size={16} className="text-white"/></div></div><div className="flex-1 w-full space-y-2"><input type="text" value={staff.name} onChange={(e) => handleUpdateStaff(staff.id, 'name', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none font-bold text-slate-800" placeholder="Nombre"/><input type="text" value={staff.role} onChange={(e) => handleUpdateStaff(staff.id, 'role', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none text-sm text-slate-500" placeholder="Rol"/><input type="text" value={staff.image} onChange={(e) => handleUpdateStaff(staff.id, 'image', e.target.value)} className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-400 outline-none focus:border-slate-400" placeholder="URL Foto de Perfil"/></div><button onClick={() => { setStaffData(staffData.filter(s => s.id !== staff.id)) }} className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button></div>))}</div>
+                <div className="grid gap-4">{staffData.map(staff => (<div key={staff.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50/50"><div className="relative group w-16 h-16 shrink-0"><img src={staff.image} className="w-full h-full rounded-full object-cover"/><div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><Upload size={16} className="text-white"/></div></div><div className="flex-1 w-full space-y-2"><input type="text" value={staff.name} onChange={(e) => handleUpdateStaff(staff.id, 'name', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none font-bold text-slate-800" placeholder="Nombre"/><input type="text" value={staff.role} onChange={(e) => handleUpdateStaff(staff.id, 'role', e.target.value)} className="w-full bg-transparent border-b border-transparent focus:border-slate-300 outline-none text-sm text-slate-500" placeholder="Rol"/><input type="text" value={staff.image} onChange={(e) => handleUpdateStaff(staff.id, 'image', e.target.value)} className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-400 outline-none focus:border-slate-400" placeholder="URL Foto de Perfil"/></div>
+                          <div className="w-full sm:w-48 space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-slate-400">PIN Profesional</label>
+                            <input
+                              type="text"
+                              value={staff.pin || ''}
+                              onChange={(e) => handleUpdateStaff(staff.id, 'pin', e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400"
+                              placeholder="Ej: 1234"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStaffId(expandedStaffId === staff.id ? null : staff.id)}
+                              className="w-full text-xs font-bold text-slate-600 border border-slate-200 rounded px-2 py-1 hover:bg-white transition"
+                            >
+                              {expandedStaffId === staff.id ? 'Ocultar horarios' : 'Editar horarios'}
+                            </button>
+                          </div>
+                          <button onClick={() => { setStaffData(staffData.filter(s => s.id !== staff.id)) }} className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
+                        </div>
+                        {expandedStaffId === staff.id && (
+                          <div className="mt-3 bg-white border border-slate-200 rounded-xl p-4">
+                            <p className="text-xs text-slate-500 mb-3"><span className="font-bold text-slate-700">Horarios de trabajo</span> (se guardan automáticamente)</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {WEEK_KEYS.map((k) => (
+                                <div key={k} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={ensureStaffSchedule(staff).schedule[k].enabled}
+                                      onChange={(e) => {
+                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], enabled: e.target.checked } };
+                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+                                      }}
+                                    />
+                                    <span className="text-sm font-bold text-slate-700">{WEEK_LABELS[k]}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={ensureStaffSchedule(staff).schedule[k].start}
+                                      onChange={(e) => {
+                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], start: e.target.value } };
+                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+                                      }}
+                                      className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
+                                    >
+                                      {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                    <span className="text-xs text-slate-400">a</span>
+                                    <select
+                                      value={ensureStaffSchedule(staff).schedule[k].end}
+                                      onChange={(e) => {
+                                        const nextSchedule = { ...ensureStaffSchedule(staff).schedule, [k]: { ...ensureStaffSchedule(staff).schedule[k], end: e.target.value } };
+                                        handleUpdateStaff(staff.id, 'schedule', nextSchedule);
+                                      }}
+                                      className="px-2 py-1 border border-slate-200 rounded text-xs bg-white"
+                                    >
+                                      {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>))}</div>
               </div>
 
               {/* Review Management */}
@@ -768,7 +1134,126 @@ export default function App() {
           )}
 
           {/* Reuse Clients View */}
-          {dashboardView === 'clients' && (
+          
+
+{/* AGENDA / CITAS (ADMIN) */}
+{dashboardView === 'agenda' && (
+  <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">Agenda y Gestión de Citas</h3>
+          <p className="text-sm text-slate-500">Cancela, confirma asistencia y revisa el día por profesional.</p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase">Fecha</label>
+            <input
+              type="date"
+              value={agendaDate}
+              onChange={(e) => setAgendaDate(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase">Profesional</label>
+            <select
+              value={selectedStaffIdForAgenda}
+              onChange={(e) => setSelectedStaffIdForAgenda(e.target.value)}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+            >
+              <option value="all">Todos</option>
+              {staffData.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-slate-500 font-semibold">
+            <tr>
+              <th className="p-4">Hora</th>
+              <th className="p-4">Cliente</th>
+              <th className="p-4">Servicio</th>
+              <th className="p-4">Profesional</th>
+              <th className="p-4">Estado</th>
+              <th className="p-4">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {appointments
+              .filter((a) => a.date === agendaDate)
+              .filter((a) => selectedStaffIdForAgenda === 'all' ? true : String(a.staffId) === String(selectedStaffIdForAgenda))
+              .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+              .map((app) => (
+                <tr key={app.id} className="hover:bg-slate-50/60 transition">
+                  <td className="p-4 font-bold text-slate-800">{app.time}</td>
+                  <td className="p-4">
+                    <div className="font-bold text-slate-800">{app.clientName}</div>
+                    <div className="text-xs text-slate-400">{app.clientPhone}</div>
+                  </td>
+                  <td className="p-4">{app.serviceTitle}</td>
+                  <td className="p-4">{app.staffName}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      app.status === 'Cancelado' ? 'bg-red-100 text-red-700' :
+                      app.status === 'Asistió' ? 'bg-emerald-100 text-emerald-700' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {app.status || 'Confirmado'}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {app.status !== 'Asistió' && app.status !== 'Cancelado' && (
+                        <button
+                          onClick={() => handleMarkAttended(app)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1"
+                        >
+                          <CheckCircle size={14}/> Asistió
+                        </button>
+                      )}
+                      {app.status === 'Cancelado' && (
+                        <button
+                          onClick={() => handleReconfirmAppointment(app)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition"
+                        >
+                          Reactivar
+                        </button>
+                      )}
+                      {app.status !== 'Cancelado' && (
+                        <button
+                          onClick={() => handleCancelAppointment(app)}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition flex items-center gap-1"
+                        >
+                          <XCircle size={14}/> Cancelar
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            {appointments
+              .filter((a) => a.date === agendaDate)
+              .filter((a) => selectedStaffIdForAgenda === 'all' ? true : String(a.staffId) === String(selectedStaffIdForAgenda))
+              .length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-400">No hay citas para esta fecha.</td>
+                </tr>
+              )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+)}
+
+{dashboardView === 'clients' && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in duration-300">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                   <h3 className="font-bold text-slate-700">Base de Clientes</h3>
@@ -785,7 +1270,191 @@ export default function App() {
     );
   }
 
-  // --- VIEW: LANDING PAGE (CLIENTE) ---
+  
+
+// --- VIEW: LOGIN PROFESIONAL ---
+if (view === 'staff_login') {
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
+      <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
+        <div className={`absolute top-0 left-0 w-full h-2 ${getColorClass('bg')}`}></div>
+        <div className="text-center mb-8">
+          <div className={`w-16 h-16 ${getColorClass('bg')} rounded-xl flex items-center justify-center mx-auto mb-4 text-white shadow-lg`}><User size={32} /></div>
+          <h2 className="text-2xl font-bold text-slate-800">Acceso Profesional</h2>
+          <p className="text-slate-500 text-sm">Revisa tu agenda y confirma o cancela citas.</p>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setStaffLoginError('');
+
+            const staff = staffData.find((s) => String(s.id) === String(staffLoginData.staffId));
+            if (!staff) {
+              setStaffLoginError('Selecciona un profesional.');
+              return;
+            }
+            if ((staff.pin || '') !== (staffLoginData.pin || '')) {
+              setStaffLoginError('PIN incorrecto.');
+              return;
+            }
+            setStaffUser(staff);
+            setView('staff_dashboard');
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">Profesional</label>
+            <select
+              value={staffLoginData.staffId}
+              onChange={(e) => setStaffLoginData({ ...staffLoginData, staffId: e.target.value })}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              <option value="">Selecciona…</option>
+              {staffData.map((s) => (
+                <option key={s.id} value={String(s.id)}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">PIN</label>
+            <input
+              type="password"
+              value={staffLoginData.pin}
+              onChange={(e) => setStaffLoginData({ ...staffLoginData, pin: e.target.value })}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-slate-400"
+              placeholder="••••"
+            />
+          </div>
+
+          {staffLoginError && (
+            <p className="text-red-500 text-xs font-bold text-center bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2">
+              <AlertTriangle size={14}/> {staffLoginError}
+            </p>
+          )}
+
+          <button type="submit" className={`w-full ${getColorClass('bg')} text-white py-3 rounded-lg font-bold hover:opacity-90 transition shadow-lg`}>
+            Ingresar
+          </button>
+          <button type="button" onClick={() => setView('landing')} className="w-full text-slate-500 text-sm font-medium py-2 hover:text-slate-800 transition">
+            ← Volver a la web
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// --- VIEW: DASHBOARD PROFESIONAL ---
+if (view === 'staff_dashboard') {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todays = staffAppointments
+    .filter((a) => a.date === todayStr)
+    .filter((a) => String(a.staffId) === String(staffUser?.id))
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Agenda de {staffUser?.name}</h2>
+            <p className="text-sm text-slate-500">Citas de hoy: {todayStr}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setStaffUser(null); setStaffLoginData({ staffId: '', pin: '' }); setView('landing'); }}
+              className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 transition"
+            >
+              Salir
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <h3 className="font-bold text-slate-700">Citas del día</h3>
+            <span className="text-xs text-slate-400">{todays.length} citas</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-white text-slate-500 font-semibold">
+                <tr>
+                  <th className="p-4">Hora</th>
+                  <th className="p-4">Cliente</th>
+                  <th className="p-4">Servicio</th>
+                  <th className="p-4">Estado</th>
+                  <th className="p-4">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {todays.map((app) => (
+                  <tr key={app.id} className="hover:bg-slate-50/60 transition">
+                    <td className="p-4 font-bold text-slate-800">{app.time}</td>
+                    <td className="p-4">
+                      <div className="font-bold text-slate-800">{app.clientName}</div>
+                      <div className="text-xs text-slate-400">{app.clientPhone}</div>
+                    </td>
+                    <td className="p-4">{app.serviceTitle}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                        app.status === 'Cancelado' ? 'bg-red-100 text-red-700' :
+                        app.status === 'Asistió' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {app.status || 'Confirmado'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-2">
+                        {app.status !== 'Asistió' && app.status !== 'Cancelado' && (
+                          <button
+                            onClick={() => handleMarkAttended(app)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1"
+                          >
+                            <CheckCircle size={14}/> Asistió
+                          </button>
+                        )}
+                        {app.status !== 'Cancelado' && (
+                          <button
+                            onClick={() => handleCancelAppointment(app)}
+                            className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition flex items-center gap-1"
+                          >
+                            <XCircle size={14}/> Cancelar
+                          </button>
+                        )}
+                        {app.status === 'Cancelado' && (
+                          <button
+                            onClick={() => handleReconfirmAppointment(app)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition"
+                          >
+                            Reactivar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {todays.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-400">No tienes citas hoy.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400 mt-4">Tip: si necesitas cambiar tu PIN u horarios, pídelo al dueño en el panel.</p>
+      </div>
+    </div>
+  );
+}
+
+// --- VIEW: LANDING PAGE (CLIENTE) ---
   return (
     <div className={`font-sans text-slate-700 bg-slate-50/50 min-h-screen flex flex-col`}>
       <nav className={`fixed w-full z-40 transition-all duration-300 ${scrolled ? 'bg-white shadow-lg py-3' : 'bg-black/20 backdrop-blur-sm py-5'}`}>
@@ -794,7 +1463,8 @@ export default function App() {
             {config.logoUrl ? <img src={config.logoUrl} alt="Logo" className="w-10 h-10 object-contain bg-white rounded-lg shadow-sm"/> : <div className={`p-2 rounded-lg transition-colors ${scrolled ? `${getColorClass('bg')} text-white` : `bg-white ${getColorClass('text')}`}`}><Scissors size={22} strokeWidth={2.5} /></div>}
             <div className="flex flex-col"><span className={`text-xl font-bold leading-none tracking-tight ${scrolled ? 'text-slate-900' : 'text-white'}`}>{config.businessName}</span><span className={`text-[10px] uppercase font-bold tracking-widest ${scrolled ? getColorClass('text') : 'text-blue-200'}`}>Reserva Online</span></div>
           </div>
-          <div className="hidden md:flex items-center gap-8"><a href="#" onClick={(e) => handleNavClick(e, 'top')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Inicio</a><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Servicios</a><a href="#store" onClick={(e) => handleNavClick(e, 'store')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Tienda</a><a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Portafolio</a><a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Reseñas</a><button onClick={() => setView('login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? `${getColorClass('bg')} text-white` : 'bg-white text-slate-900'}`}><User size={16} /> Soy Dueño</button></div>
+          <div className="hidden md:flex items-center gap-8"><a href="#" onClick={(e) => handleNavClick(e, 'top')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Inicio</a><a href="#servicios" onClick={(e) => handleNavClick(e, 'servicios')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Servicios</a><a href="#store" onClick={(e) => handleNavClick(e, 'store')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Tienda</a><a href="#portfolio" onClick={(e) => handleNavClick(e, 'portfolio')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Portafolio</a><a href="#reviews" onClick={(e) => handleNavClick(e, 'reviews')} className={`text-sm font-semibold hover:opacity-80 transition ${scrolled ? 'text-slate-600' : 'text-white/90'}`}>Reseñas</a><button onClick={() => setView('staff_login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? 'bg-white text-slate-900' : 'bg-white/90 text-slate-900'}`}><User size={16} /> Soy Profesional</button>
+          <button onClick={() => setView('login')} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition shadow-md hover:shadow-lg ${scrolled ? `${getColorClass('bg')} text-white` : 'bg-white text-slate-900'}`}><User size={16} /> Soy Dueño</button></div>
           <button className={`md:hidden p-2 rounded-md ${scrolled ? 'text-slate-800' : 'text-white'}`} onClick={() => setIsMenuOpen(!isMenuOpen)}><Menu size={28} /></button>
         </div>
         {/* Mobile Menu Dropdown Restored */}
@@ -855,7 +1525,11 @@ export default function App() {
                             <p className="text-xs text-slate-400 mb-4">{item.unit}</p>
                             <div className="mt-auto flex items-center justify-between">
                                 <span className="font-bold text-lg text-slate-900">$ {item.price.toLocaleString()}</span>
-                                <button className={`p-2 rounded-full ${item.stock > 0 ? `${getColorClass('bg')} text-white hover:opacity-90` : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => item.stock > 0 && handleProductOrderWhatsApp(item)}
+                                  className={`p-2 rounded-full ${item.stock > 0 ? `${getColorClass('bg')} text-white hover:opacity-90` : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+                                >
                                     <ShoppingBag size={18}/>
                                 </button>
                             </div>
@@ -927,8 +1601,32 @@ export default function App() {
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50"><div><h3 className="font-bold text-lg text-slate-900">Reservar Turno</h3><p className="text-xs text-slate-500">Paso {step} de 5</p></div><button onClick={() => setBookingModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500"><X size={20} /></button></div>
             <div className="p-6 overflow-y-auto">
+              {bookingError && (
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-bold flex items-center gap-2">
+                  <AlertTriangle size={16} /> {bookingError}
+                </div>
+              )}
               {step === 1 && (<div className="animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-4">Elige un Profesional</h4><div className="grid gap-4">{staffData.map(staff => (<button key={staff.id} onClick={() => setSelectedStaff(staff)} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left group ${selectedStaff?.id === staff.id ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50` : 'border-slate-100 hover:border-slate-300'}`}><img src={staff.image} alt={staff.name} className="w-14 h-14 rounded-full object-cover group-hover:scale-105 transition" /><div><p className="font-bold text-slate-900">{staff.name}</p><p className="text-xs text-slate-500 font-medium">{staff.role}</p></div>{selectedStaff?.id === staff.id && <div className={`ml-auto ${getColorClass('bg')} text-white p-1 rounded-full`}><CheckCircle size={16} /></div>}</button>))}</div></div>)}
-              {step === 2 && (<div className="space-y-6 animate-in slide-in-from-right duration-300"><div><label className="block text-sm font-bold text-slate-700 mb-3">Día</label><div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">{weekDays.map((day, idx) => (<button key={idx} onClick={() => setSelectedDate(day.fullDate)} className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${selectedDate === day.fullDate ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50 text-${config.primaryColor}-700 shadow-md scale-105` : 'border-slate-100 text-slate-500 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{day.dayName}</span><span className="text-2xl font-bold">{day.dayNumber}</span></button>))}</div></div>{selectedDate && (<div className="animate-in fade-in slide-in-from-bottom-2 duration-300"><label className="block text-sm font-bold text-slate-700 mb-3">Horario con {selectedStaff.name.split(' ')[0]}</label><div className="grid grid-cols-4 gap-3">{TIME_SLOTS.map((time) => (<button key={time} onClick={() => setSelectedTime(time)} className={`py-2 rounded-lg text-sm font-semibold transition-all ${selectedTime === time ? `${getColorClass('bg')} text-white shadow-md transform scale-105` : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{time}</button>))}</div></div>)}</div>)}
+              {step === 2 && (<div className="space-y-6 animate-in slide-in-from-right duration-300"><div><label className="block text-sm font-bold text-slate-700 mb-3">Día</label><div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">{weekDays.map((day, idx) => (<button key={idx} onClick={() => setSelectedDate(day.fullDate)} className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center border-2 transition-all ${selectedDate === day.fullDate ? `border-${config.primaryColor}-600 bg-${config.primaryColor}-50 text-${config.primaryColor}-700 shadow-md scale-105` : 'border-slate-100 text-slate-500 hover:border-slate-300'}`}><span className="text-xs font-bold uppercase">{day.dayName}</span><span className="text-2xl font-bold">{day.dayNumber}</span></button>))}</div></div>{selectedDate && (<div className="animate-in fade-in slide-in-from-bottom-2 duration-300"><label className="block text-sm font-bold text-slate-700 mb-3">Horario con {selectedStaff.name.split(' ')[0]}</label><div className="grid grid-cols-4 gap-3">{TIME_SLOTS.map((time) => {
+                  const disabled = isTimeDisabled(time);
+                  return (
+                    <button
+                      key={time}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => !disabled && setSelectedTime(time)}
+                      className={`py-2 rounded-lg text-sm font-semibold transition-all ${
+                        disabled
+                          ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                          : selectedTime === time
+                            ? `${getColorClass('bg')} text-white shadow-md transform scale-105`
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {time}
+                    </button>
+                  );
+                })}</div></div>)}</div>)}
               {step === 3 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><div className="space-y-3"><label className="font-bold text-slate-700">Nombre</label><input type="text" value={clientData.name} onChange={(e) => setClientData({...clientData, name: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: Juan Pérez"/></div><div className="space-y-3"><label className="font-bold text-slate-700">WhatsApp</label><input type="tel" value={clientData.phone} onChange={(e) => setClientData({...clientData, phone: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-400 transition" placeholder="Ej: 11 1234 5678"/></div></div>)}
               {step === 4 && (<div className="space-y-4 animate-in slide-in-from-right duration-300"><h4 className="font-bold text-slate-800 mb-2">Método de Pago</h4><button onClick={() => setPaymentMethod('mp')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'mp' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600"><CreditCard size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Mercado Pago / Tarjeta</p><p className="text-xs text-green-600 font-bold">¡Ahorras 5% pagando ahora!</p></div></div><div className="text-right"><p className="text-xs text-slate-400 line-through">${selectedService.price}</p><p className="font-bold text-blue-600">${selectedService.price * 0.95}</p></div></button><button onClick={() => setPaymentMethod('cash')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${paymentMethod === 'cash' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300'}`}><div className="flex items-center gap-3"><div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600"><DollarSign size={20}/></div><div className="text-left"><p className="font-bold text-slate-800">Efectivo en el local</p><p className="text-xs text-slate-500">Pagas el total al asistir</p></div></div><p className="font-bold text-slate-700">${selectedService.price}</p></button></div>)}
               {step === 5 && (<div className="text-center py-8 animate-in zoom-in duration-300"><div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-100"><CheckCircle size={48} /></div><h3 className="text-2xl font-bold text-slate-900 mb-2">¡Turno Confirmado!</h3><div className="bg-slate-50 p-6 rounded-2xl text-left space-y-3 mb-6 border border-slate-100 shadow-sm relative overflow-hidden"><div className={`absolute top-0 left-0 w-1 h-full ${getColorClass('bg')}`}></div><div className="flex justify-between items-center"><span className="text-slate-500 text-sm">Profesional</span><span className="font-bold text-slate-900 flex items-center gap-2">{selectedStaff.name}</span></div><div className="flex justify-between"><span className="text-slate-500 text-sm">Fecha</span><span className="font-bold text-slate-900">{selectedDate} - {selectedTime} hs</span></div><div className="flex justify-between border-t border-slate-200 pt-3 mt-2"><span className="font-bold text-slate-900">Total {paymentMethod === 'mp' ? '(con dcto.)' : ''}</span><span className={`font-bold ${getColorClass('text')}`}>$ {paymentMethod === 'mp' ? selectedService.price * 0.95 : selectedService.price}</span></div></div>
