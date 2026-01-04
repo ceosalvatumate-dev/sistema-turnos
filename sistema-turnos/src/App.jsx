@@ -23,7 +23,9 @@ import {
 /**
  * * */
 
-// --- DATOS INICIALES ---
+// --- DATOS INICIALES POR DEFECTO ---
+
+const DEFAULT_SCHEDULE = { start: "09:00", end: "20:00", days: [1,2,3,4,5,6] };
 
 const INITIAL_CONFIG = {
   businessName: "Barbería Premium",
@@ -35,14 +37,13 @@ const INITIAL_CONFIG = {
   socialWhatsapp: "5491112345678"
 };
 
-// Staff con horarios por defecto
 const INITIAL_STAFF = [
   { 
     id: 1, 
     name: "Juan Pérez", 
     role: "Master Barber", 
     image: "https://images.unsplash.com/photo-1581803118522-7b72a50f7e9f?q=80&w=200&auto=format&fit=crop",
-    schedule: { start: "09:00", end: "20:00", days: [1,2,3,4,5,6] } // 0=Dom, 1=Lun...
+    schedule: DEFAULT_SCHEDULE
   },
   { 
     id: 2, 
@@ -64,39 +65,27 @@ const INITIAL_PRODUCTS = [
   { id: 1, product: "Cera Mate Strong", price: 2500, stock: 15, unit: "unidades", image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=500" },
   { id: 2, product: "Shampoo Premium 5L", price: 8000, stock: 2, unit: "bidones", image: "https://images.unsplash.com/photo-1556228720-1957be83f360?q=80&w=500" },
   { id: 3, product: "Navajas Pro", price: 1200, stock: 150, unit: "cajas", image: "https://images.unsplash.com/photo-1599351431202-6e0000a94376?q=80&w=500" },
-  { id: 4, product: "Aceite para Barba", price: 3200, stock: 8, unit: "unidades", image: "https://images.unsplash.com/photo-1626898748301-49999a4c7f07?q=80&w=500" },
 ];
 
-const INITIAL_REVIEWS = Array.from({ length: 6 }, (_, i) => ({
+const INITIAL_REVIEWS = Array.from({ length: 4 }, (_, i) => ({
   id: i + 1,
-  user: i % 2 === 0 ? `Cliente ${i + 1}` : `Usuario ${i + 1}`,
+  user: `Cliente ${i + 1}`,
   rating: 5,
-  comment: i % 2 === 0 
-    ? "Excelente servicio, muy puntuales y el lugar impecable. Volveré sin duda."
-    : "Me encantó el corte, exactamente lo que pedía. Muy recomendado el staff.",
-  image: i === 0 ? "https://images.unsplash.com/photo-1595152772835-219674b2a8a6?q=80&w=200" : "" 
+  comment: "Excelente servicio, muy puntuales.",
+  image: "" 
 }));
 
 const INITIAL_SERVICES = [
-  { id: 1, title: "Corte de cabello", category: ["Hombre", "Barbería"], price: 1500, duration: 45, image: "https://images.unsplash.com/photo-1599351431202-6e0000a94376?q=80&w=800&auto=format&fit=crop", description: "Cortes modernos y clásicos, degradados (fade), incluye lavado." },
-  { id: 2, title: "Barbería Clásica", category: ["Barbería", "Hombre"], price: 1200, duration: 30, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=800&auto=format&fit=crop", description: "Ritual de afeitado tradicional con toalla caliente." },
-  { id: 3, title: "Perfilado de barba", category: ["Hombre", "Barbería"], price: 1400, duration: 30, image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=800&auto=format&fit=crop", description: "Diseño detallado de barba según la forma de tu rostro." },
-  { id: 4, title: "Corte de Dama", category: ["Mujer", "Estilismo"], price: 1300, duration: 60, image: "https://images.unsplash.com/photo-1605497788044-5a32c7078486?q=80&w=800&auto=format&fit=crop", description: "Corte estilizado según tendencias." },
-  { id: 6, title: "Alisado Keratina", category: ["Mujer", "Estilismo"], price: 4500, duration: 120, image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=800&auto=format&fit=crop", description: "Tratamiento alisante progresivo sin formol." },
-  { id: 9, title: "Color y Tinte", category: ["Mujer", "Estilismo"], price: 3500, duration: 150, image: "https://images.unsplash.com/photo-1522337660859-02fbefca4702?q=80&w=800&auto=format&fit=crop", description: "Renovación de color, balayage o mechas." },
+  { id: 1, title: "Corte de cabello", category: ["Hombre", "Barbería"], price: 1500, duration: 45, image: "https://images.unsplash.com/photo-1599351431202-6e0000a94376?q=80&w=800&auto=format&fit=crop", description: "Cortes modernos y clásicos." },
+  { id: 2, title: "Barbería Clásica", category: ["Barbería", "Hombre"], price: 1200, duration: 30, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=800&auto=format&fit=crop", description: "Afeitado tradicional." },
+  { id: 4, title: "Corte de Dama", category: ["Mujer", "Estilismo"], price: 1300, duration: 60, image: "https://images.unsplash.com/photo-1605497788044-5a32c7078486?q=80&w=800&auto=format&fit=crop", description: "Corte estilizado." },
   { id: 5, title: "Nail Art", category: ["Mujer", "Belleza"], price: 1300, duration: 90, image: "https://images.unsplash.com/photo-1604654894610-df63bc536371?q=80&w=800&auto=format&fit=crop", description: "Esculpidas y semipermanentes." },
-  { id: 7, title: "Manicure Spa", category: ["Mujer", "Belleza"], price: 2000, duration: 60, image: "https://images.unsplash.com/photo-1610992015732-2449b76344bc?q=80&w=800&auto=format&fit=crop", description: "Limpieza profunda de cutículas y masajes." },
 ];
 
-const INITIAL_PORTFOLIO_CATS = ["Cortes Hombre", "Barbería", "Cortes Dama", "Uñas", "Tintes", "Peinados"];
-
+const INITIAL_PORTFOLIO_CATS = ["Cortes Hombre", "Barbería", "Cortes Dama", "Uñas"];
 const INITIAL_PORTFOLIO = [
-  { id: 1, image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=800", category: "Peinados", title: "Alisado Espejo" },
-  { id: 2, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=800", category: "Barbería", title: "Fade & Beard" },
-  { id: 3, image: "https://images.unsplash.com/photo-1604654894610-df63bc536371?q=80&w=800", category: "Uñas", title: "Nail Art Verano" },
-  { id: 4, image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=800", category: "Barbería", title: "Perfilado Clásico" },
-  { id: 5, image: "https://images.unsplash.com/photo-1517832606299-7ae9b720a186?q=80&w=800", category: "Cortes Dama", title: "Corte Bob" },
-  { id: 6, image: "https://images.unsplash.com/photo-1622286342621-4bd786c2447c?q=80&w=800", category: "Cortes Hombre", title: "Degradado Alto" },
+  { id: 1, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=800", category: "Barbería", title: "Fade & Beard" },
+  { id: 2, image: "https://images.unsplash.com/photo-1604654894610-df63bc536371?q=80&w=800", category: "Uñas", title: "Nail Art" },
 ];
 
 const CATEGORIES = ["Todos", "Hombre", "Mujer", "Barbería", "Estilismo", "Belleza"];
@@ -167,7 +156,7 @@ export default function App() {
   
   const [currentStaffUser, setCurrentStaffUser] = useState(null);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // [NEW] Estado de guardado manual
+  const [isSaving, setIsSaving] = useState(false);
 
   const reviewsRef = useRef(null);
   const SHOP_ID = 'default';
@@ -211,17 +200,15 @@ export default function App() {
   // Cargar localStorage SOLO si Firebase NO está activo
   useEffect(() => {
     if (firebaseEnabled) return;
-    const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
-    const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
-    const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
-    const savedServices = localStorage.getItem('appServices'); if (savedServices) setServicesData(JSON.parse(savedServices));
-    const savedReviews = localStorage.getItem('appReviews'); if (savedReviews) setReviewsData(JSON.parse(savedReviews));
-    const savedPortfolio = localStorage.getItem('appPortfolio'); if (savedPortfolio) setPortfolioData(JSON.parse(savedPortfolio));
-    const savedProducts = localStorage.getItem('appProducts'); if (savedProducts) setProductsData(JSON.parse(savedProducts));
-    const savedPortCats = localStorage.getItem('appPortfolioCats'); if (savedPortCats) setPortfolioCategories(JSON.parse(savedPortCats));
+    try {
+      const savedApps = localStorage.getItem('appointments'); if (savedApps) setAppointments(JSON.parse(savedApps));
+      const savedConfig = localStorage.getItem('appConfig'); if (savedConfig) setConfig(JSON.parse(savedConfig));
+      const savedStaff = localStorage.getItem('appStaff'); if (savedStaff) setStaffData(JSON.parse(savedStaff));
+      const savedServices = localStorage.getItem('appServices'); if (savedServices) setServicesData(JSON.parse(savedServices));
+    } catch(e) { console.error("Error cargando local storage", e); }
   }, []);
 
-  // [FIX] Sincronización SOLO LECTURA para evitar Loops
+  // [FIX] Sincronización BLINDADA (Sanitiza datos corruptos para evitar Crash)
   useEffect(() => {
     if (!firebaseEnabled) return;
 
@@ -230,7 +217,6 @@ export default function App() {
     return onSnapshot(shopRef, async (snap) => {
       if (!snap.exists()) {
         if (isAdmin) {
-          // Inicializar solo si es admin
           const payload = {
             config, staffData, servicesData, reviewsData,
             portfolioData, productsData, portfolioCategories,
@@ -243,9 +229,16 @@ export default function App() {
       }
 
       const data = snap.data();
+      
+      // SANITIZACIÓN: Si 'schedule' no existe en algún staff, ponerle default
+      const sanitizedStaff = (data.staffData || staffData).map(s => ({
+        ...s,
+        schedule: (s.schedule && s.schedule.start && s.schedule.end) ? s.schedule : DEFAULT_SCHEDULE
+      }));
+
       const payload = {
         config: data.config ?? config,
-        staffData: data.staffData ?? staffData,
+        staffData: sanitizedStaff,
         servicesData: data.servicesData ?? servicesData,
         reviewsData: data.reviewsData ?? reviewsData,
         portfolioData: data.portfolioData ?? portfolioData,
@@ -253,8 +246,6 @@ export default function App() {
         portfolioCategories: data.portfolioCategories ?? portfolioCategories,
       };
 
-      // Si nosotros mismos acabamos de guardar, no actualizamos el estado para evitar re-render innecesario
-      // aunque Firestore es inteligente, mejor prevenir.
       if (isSaving) return;
 
       lastRemoteRef.current = JSON.stringify(payload);
@@ -268,9 +259,9 @@ export default function App() {
       setPortfolioCategories(payload.portfolioCategories);
       setDataLoaded(true);
     });
-  }, [isAdmin, isSaving]); // Agregamos isSaving a deps para que no lea mientras guarda
+  }, [isAdmin, isSaving]); 
 
-  // Sync Appointments (Always Listen)
+  // Sync Appointments
   useEffect(() => {
     if (!firebaseEnabled) return;
     const appsRef = collection(db, 'shops', SHOP_ID, 'appointments');
@@ -284,8 +275,6 @@ export default function App() {
     });
   }, []);
 
-  // [FIX] AUTO SAVE REMOVED. Added manual save function below.
-
   const handleManualSave = async () => {
       if (!firebaseEnabled || !isAdmin) return;
       setIsSaving(true);
@@ -295,7 +284,6 @@ export default function App() {
             portfolioData, productsData, portfolioCategories,
         };
         await setDoc(doc(db, 'shops', SHOP_ID), payload, { merge: true });
-        // Simular pequeño delay para feedback visual
         await new Promise(r => setTimeout(r, 500));
         alert("¡Cambios guardados correctamente en la nube!");
       } catch (error) {
@@ -306,17 +294,8 @@ export default function App() {
       }
   };
 
-  useEffect(() => { 
-    if (firebaseEnabled) return;
-    localStorage.setItem('appointments', JSON.stringify(appointments)); 
-  }, [appointments]);
-
-  useEffect(() => { 
-    if (firebaseEnabled) return;
-    localStorage.setItem('appConfig', JSON.stringify(config)); 
-  }, [config]);
-
   const getColorClass = (type) => {
+    const safeColor = config?.primaryColor || 'blue'; // Fallback
     const colors = {
       blue: { bg: 'bg-blue-600', text: 'text-blue-600', hover: 'hover:bg-blue-700', light: 'bg-blue-50', border: 'border-blue-600', ring: 'focus:ring-blue-500', shadow: 'shadow-blue-500/20', bar: 'bg-blue-500' },
       indigo: { bg: 'bg-indigo-600', text: 'text-indigo-600', hover: 'hover:bg-indigo-700', light: 'bg-indigo-50', border: 'border-indigo-600', ring: 'focus:ring-indigo-500', shadow: 'shadow-indigo-500/20', bar: 'bg-indigo-500' },
@@ -324,71 +303,55 @@ export default function App() {
       rose: { bg: 'bg-rose-600', text: 'text-rose-600', hover: 'hover:bg-rose-700', light: 'bg-rose-50', border: 'border-rose-600', ring: 'focus:ring-rose-500', shadow: 'shadow-rose-500/20', bar: 'bg-rose-500' },
       slate: { bg: 'bg-slate-800', text: 'text-slate-800', hover: 'hover:bg-slate-900', light: 'bg-slate-100', border: 'border-slate-800', ring: 'focus:ring-slate-500', shadow: 'shadow-slate-500/20', bar: 'bg-slate-700' },
     };
-    return colors[config.primaryColor][type];
+    return colors[safeColor] || colors['blue'];
   };
 
   const activeAppointments = useMemo(() => appointments.filter(a => a.status !== 'Cancelado'), [appointments]);
 
-  const clientsData = useMemo(() => {
-    const clientsMap = {};
-    const sortedAppointments = [...activeAppointments].sort((a, b) => new Date(a.date) - new Date(b.date));
-    sortedAppointments.forEach(app => {
-      const phone = app.clientPhone;
-      if (!clientsMap[phone]) clientsMap[phone] = { name: app.clientName, phone: app.clientPhone, visits: 0, spent: 0, firstVisit: app.date, lastVisit: app.date, label: 'Nuevo' };
-      clientsMap[phone].visits += 1;
-      clientsMap[phone].spent += app.price;
-      clientsMap[phone].lastVisit = app.date;
-    });
-    return Object.values(clientsMap).map(client => {
-      if (client.visits > 5) client.label = 'VIP'; else if (client.visits > 2) client.label = 'Frecuente';
-      return client;
-    });
-  }, [activeAppointments]);
-
   const dashboardStats = useMemo(() => {
-    const today = new Date();
-    const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate() - today.getDay());
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const todayStr = today.toISOString().split('T')[0];
-    
-    const totalRevenue = activeAppointments.reduce((sum, app) => sum + app.price, 0);
-    const todayRevenue = activeAppointments.filter(app => app.date === todayStr).reduce((sum, app) => sum + app.price, 0);
-    const weeklyRevenue = activeAppointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfWeek && appDate <= today; }).reduce((sum, app) => sum + app.price, 0);
-    const monthlyRevenue = activeAppointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfMonth && appDate <= today; }).reduce((sum, app) => sum + app.price, 0);
-    const dailyAppointments = activeAppointments.filter(app => app.date === todayStr).length;
+    // Try-Catch interno para evitar crash en cálculos
+    try {
+        const today = new Date();
+        const startOfWeek = new Date(today); startOfWeek.setDate(today.getDate() - today.getDay());
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const todayStr = today.toISOString().split('T')[0];
+        
+        const totalRevenue = activeAppointments.reduce((sum, app) => sum + (app.price || 0), 0);
+        const todayRevenue = activeAppointments.filter(app => app.date === todayStr).reduce((sum, app) => sum + (app.price || 0), 0);
+        const weeklyRevenue = activeAppointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfWeek && appDate <= today; }).reduce((sum, app) => sum + (app.price || 0), 0);
+        const monthlyRevenue = activeAppointments.filter(app => { const appDate = new Date(app.date); return appDate >= startOfMonth && appDate <= today; }).reduce((sum, app) => sum + (app.price || 0), 0);
+        const dailyAppointments = activeAppointments.filter(app => app.date === todayStr).length;
 
-    const staffDailyCounts = {};
-    staffData.forEach(s => staffDailyCounts[s.name] = 0);
-    activeAppointments.filter(app => app.date === todayStr).forEach(app => { if (staffDailyCounts[app.staffName] !== undefined) staffDailyCounts[app.staffName]++; else staffDailyCounts[app.staffName] = 1; });
-    const staffPerformance = staffData.map(staff => {
-        const staffApps = activeAppointments.filter(a => a.staffId === staff.id);
-        const count = staffApps.length;
-        const revenue = staffApps.reduce((sum, a) => sum + a.price, 0);
-        return { ...staff, count, revenue };
-    }).sort((a, b) => b.count - a.count);
+        const staffPerformance = staffData.map(staff => {
+            const staffApps = activeAppointments.filter(a => a.staffId === staff.id);
+            return { ...staff, count: staffApps.length, revenue: staffApps.reduce((sum, a) => sum + (a.price || 0), 0) };
+        }).sort((a, b) => b.count - a.count);
 
-    const salesComparison = [
-        { label: 'Mes Anterior', value: monthlyRevenue * 0.85, color: 'bg-slate-300' },
-        { label: 'Mes Actual', value: monthlyRevenue, color: getColorClass('bar') },
-        { label: 'Mejor Mes', value: Math.max(monthlyRevenue * 1.2, 50000), color: 'bg-emerald-500' }
-    ];
+        const salesComparison = [
+            { label: 'Mes Anterior', value: monthlyRevenue * 0.85, color: 'bg-slate-300' },
+            { label: 'Mes Actual', value: monthlyRevenue, color: getColorClass('bar') },
+            { label: 'Mejor Mes', value: Math.max(monthlyRevenue * 1.2, 50000), color: 'bg-emerald-500' }
+        ];
 
-    const serviceCounts = {};
-    activeAppointments.forEach(app => { serviceCounts[app.serviceTitle] = (serviceCounts[app.serviceTitle] || 0) + 1; });
-    const topServices = Object.entries(serviceCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
-    
-    const hoursMap = {};
-    activeAppointments.forEach(app => { const hour = app.time ? app.time.split(':')[0] : '09'; hoursMap[hour] = (hoursMap[hour] || 0) + 1; });
-    const busyHours = Object.entries(hoursMap).map(([hour, count]) => ({ hour: `${hour}:00`, count })).sort((a, b) => b.hour.localeCompare(a.hour));
+        const serviceCounts = {};
+        activeAppointments.forEach(app => { if(app.serviceTitle) serviceCounts[app.serviceTitle] = (serviceCounts[app.serviceTitle] || 0) + 1; });
+        const topServices = Object.entries(serviceCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+        
+        const hoursMap = {};
+        activeAppointments.forEach(app => { const hour = app.time ? app.time.split(':')[0] : '09'; hoursMap[hour] = (hoursMap[hour] || 0) + 1; });
+        const busyHours = Object.entries(hoursMap).map(([hour, count]) => ({ hour: `${hour}:00`, count })).sort((a, b) => b.hour.localeCompare(a.hour));
 
-    const futureApps = activeAppointments.filter(app => new Date(app.date + 'T' + app.time) > new Date()).sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
-    
-    return { totalRevenue, todayRevenue, weeklyRevenue, monthlyRevenue, totalAppointments: activeAppointments.length, dailyAppointments, staffDailyCounts, staffPerformance, salesComparison, topServices, busyHours, nextApp: futureApps[0] || null };
+        const futureApps = activeAppointments.filter(app => app.date && app.time && new Date(app.date + 'T' + app.time) > new Date()).sort((a, b) => new Date(a.date + 'T' + a.time) - new Date(b.date + 'T' + b.time));
+        
+        return { totalRevenue, todayRevenue, weeklyRevenue, monthlyRevenue, totalAppointments: activeAppointments.length, dailyAppointments, staffPerformance, salesComparison, topServices, busyHours, nextApp: futureApps[0] || null };
+    } catch (e) {
+        console.error("Error calculando stats", e);
+        return { totalRevenue:0, todayRevenue:0, weeklyRevenue:0, monthlyRevenue:0, totalAppointments:0, dailyAppointments:0, staffPerformance:[], salesComparison:[], topServices:[], busyHours:[], nextApp:null };
+    }
   }, [activeAppointments, staffData, config.primaryColor]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
     if (loginMode === 'staff') {
         const staffMember = staffData.find(s => s.name.toLowerCase() === loginData.email.toLowerCase() || s.name === loginData.email);
         if (staffMember) {
@@ -400,17 +363,15 @@ export default function App() {
         }
         return;
     }
-
     if (!firebaseEnabled) {
       if (loginData.email === 'admin@sistema.com' && loginData.password === 'admin123') {
         setView('dashboard');
         setLoginError('');
       } else {
-        setLoginError('Credenciales incorrectas (Prueba: admin@sistema.com / admin123)');
+        setLoginError('Credenciales incorrectas');
       }
       return;
     }
-
     try {
       await signInWithEmailAndPassword(auth, loginData.email, loginData.password);
       setLoginError('');
@@ -421,47 +382,43 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    try {
-      if (firebaseEnabled && view === 'dashboard') await signOut(auth);
-    } finally {
-      setView('landing');
-      setCurrentStaffUser(null);
-    }
+    try { if (firebaseEnabled && view === 'dashboard') await signOut(auth); } finally { setView('landing'); setCurrentStaffUser(null); }
   };
 
   const isSlotAvailable = (staffId, date, time) => {
-      return !appointments.some(app => 
-          app.staffId === staffId && 
-          app.date === date && 
-          app.time === time && 
-          app.status !== 'Cancelado'
-      );
+      return !appointments.some(app => app.staffId === staffId && app.date === date && app.time === time && app.status !== 'Cancelado');
   };
 
+  // [CRITICAL FIX] Esta función causaba la pantalla blanca si faltaba "schedule"
   const getStaffSlots = (staff, dateObj) => {
-      if (!staff || !staff.schedule || !dateObj) return [];
+      if (!staff || !dateObj) return [];
       
-      if (!staff.schedule.days.includes(dateObj.dayOfWeek)) return [];
+      // Fallback robusto: si no tiene schedule, usamos el default
+      const schedule = (staff.schedule && staff.schedule.start) ? staff.schedule : DEFAULT_SCHEDULE;
 
-      const slots = [];
-      let [startH, startM] = staff.schedule.start.split(':').map(Number);
-      const [endH, endM] = staff.schedule.end.split(':').map(Number);
-      
-      const current = new Date();
-      current.setHours(startH, startM, 0, 0);
-      
-      const end = new Date();
-      end.setHours(endH, endM, 0, 0);
+      if (!schedule.days || !schedule.days.includes(dateObj.dayOfWeek)) return [];
+      if (!schedule.start || !schedule.end) return [];
 
-      while(current < end) {
-          const h = current.getHours();
-          const m = current.getMinutes();
-          const timeString = `${h < 10 ? '0'+h : h}:${m < 10 ? '0'+m : m}`;
+      try {
+          const slots = [];
+          let [startH, startM] = schedule.start.split(':').map(Number);
+          const [endH, endM] = schedule.end.split(':').map(Number);
           
-          slots.push(timeString);
-          current.setMinutes(current.getMinutes() + 30);
+          const current = new Date(); current.setHours(startH, startM, 0, 0);
+          const end = new Date(); end.setHours(endH, endM, 0, 0);
+
+          while(current < end) {
+              const h = current.getHours();
+              const m = current.getMinutes();
+              const timeString = `${h < 10 ? '0'+h : h}:${m < 10 ? '0'+m : m}`;
+              slots.push(timeString);
+              current.setMinutes(current.getMinutes() + 30);
+          }
+          return slots;
+      } catch (e) {
+          console.error("Error generando slots", e);
+          return [];
       }
-      return slots;
   };
 
   const openBooking = (service) => { setSelectedService(service); setStep(1); setSelectedStaff(null); setSelectedDate(null); setSelectedTime(null); setPaymentMethod(null); setBookingModalOpen(true); };
@@ -469,7 +426,6 @@ export default function App() {
   const handleBookingSubmit = async () => {
     let finalPrice = selectedService.price;
     if (paymentMethod === 'mp') finalPrice = selectedService.price * 0.95;
-
     const newAppointment = {
       serviceId: selectedService.id,
       serviceTitle: selectedService.title,
@@ -485,20 +441,15 @@ export default function App() {
       status: 'Confirmado',
       createdAt: new Date().toISOString(),
     };
-
     try {
       if (firebaseEnabled) {
-        await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), {
-          ...newAppointment,
-          createdAtTS: serverTimestamp(),
-        });
+        await addDoc(collection(db, 'shops', SHOP_ID, 'appointments'), { ...newAppointment, createdAtTS: serverTimestamp() });
       } else {
         setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
       }
     } catch (err) {
       setAppointments((prev) => [...prev, { id: Date.now(), ...newAppointment }]);
     }
-
     setStep(5);
   };
 
@@ -529,7 +480,7 @@ export default function App() {
   }
 
   const handleUpdateConfig = (newSettings) => { setConfig({...config, ...newSettings}); }
-  const handleAddStaff = () => { setStaffData([...staffData, { id: Date.now(), name: "Nuevo Personal", role: "Estilista", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200", schedule: { start: "09:00", end: "18:00", days: [1,2,3,4,5] } }]); }
+  const handleAddStaff = () => { setStaffData([...staffData, { id: Date.now(), name: "Nuevo Personal", role: "Estilista", image: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=200", schedule: DEFAULT_SCHEDULE }]); }
   const handleUpdateStaff = (id, field, value) => { setStaffData(staffData.map(s => s.id === id ? { ...s, [field]: value } : s)); }
   const handleAddService = () => { setServicesData([...servicesData, { id: Date.now(), title: "Nuevo Servicio", category: ["General"], price: 0, duration: 30, image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=200", description: "Descripción del servicio" }]); }
   const handleDeleteService = (id) => { setServicesData(servicesData.filter(s => s.id !== id)); }
@@ -559,12 +510,10 @@ export default function App() {
             <div className={`w-16 h-16 ${getColorClass('bg')} rounded-xl flex items-center justify-center mx-auto mb-4 text-white shadow-lg`}><Lock size={32} /></div>
             <h2 className="text-2xl font-bold text-slate-800">Acceso al Sistema</h2><p className="text-slate-500 text-sm">Selecciona tu rol para continuar</p>
           </div>
-
           <div className="flex p-1 bg-slate-100 rounded-lg mb-6">
               <button onClick={() => setLoginMode('admin')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${loginMode === 'admin' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Dueño</button>
               <button onClick={() => setLoginMode('staff')} className={`flex-1 py-2 text-sm font-bold rounded-md transition ${loginMode === 'staff' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>Profesional</button>
           </div>
-
           <form onSubmit={handleLogin} className="space-y-4">
             {loginMode === 'admin' ? (
                 <>
@@ -574,7 +523,6 @@ export default function App() {
             ) : (
                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Nombre Completo</label><input type="text" value={loginData.email} onChange={(e) => setLoginData({...loginData, email: e.target.value})} className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 ${getColorClass('ring')}`} placeholder="Ej: Juan Pérez" /></div>
             )}
-            
             {loginError && <p className="text-red-500 text-xs font-bold text-center bg-red-50 p-3 rounded-lg flex items-center justify-center gap-2"><AlertTriangle size={14}/> {loginError}</p>}
             <button type="submit" className={`w-full ${getColorClass('bg')} text-white py-3 rounded-lg font-bold hover:opacity-90 transition shadow-lg`}>Ingresar</button>
             <button type="button" onClick={() => setView('landing')} className="w-full text-slate-500 text-sm font-medium py-2 hover:text-slate-800 transition">← Volver a la web</button>
@@ -602,7 +550,6 @@ export default function App() {
                     </div>
                     <button onClick={handleLogout} className="text-red-400 hover:bg-red-50 p-2 rounded-lg"><LogOut size={20}/></button>
                 </div>
-
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-4 bg-slate-100 border-b border-slate-200 font-bold text-slate-700 flex justify-between">
                         <span>Citas ({myAppointments.length})</span>
@@ -676,21 +623,11 @@ export default function App() {
               <p className="text-sm text-slate-500">Bienvenido al sistema de administración.</p>
             </div>
             <div className="flex items-center gap-4">
-               {/* [NEW] MANUAL SAVE BUTTON */}
-               <button 
-                onClick={handleManualSave}
-                disabled={isSaving}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition shadow-md ${isSaving ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-               >
+               <button onClick={handleManualSave} disabled={isSaving} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition shadow-md ${isSaving ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
                  <SaveIcon size={18} className={isSaving ? 'animate-spin' : ''} />
                  {isSaving ? 'Guardando...' : 'Guardar Cambios'}
                </button>
-
-               {!dataLoaded && firebaseEnabled ? (
-                   <div className="text-orange-500 text-xs font-bold animate-pulse">Sincronizando...</div>
-               ) : (
-                   <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 border border-emerald-200"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online</div>
-               )}
+               {!dataLoaded && firebaseEnabled ? (<div className="text-orange-500 text-xs font-bold animate-pulse">Sincronizando...</div>) : (<div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 border border-emerald-200"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online</div>)}
                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-slate-200 shadow-sm"><UserIcon className="text-slate-500" size={20}/></div>
             </div>
           </header>
@@ -733,7 +670,6 @@ export default function App() {
                   </div>
               </div>
 
-              {/* NEW CHARTS GRID */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                       <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><BarChart2 size={18} className="text-blue-500"/> Rendimiento del Equipo</h3>
@@ -743,17 +679,6 @@ export default function App() {
                       <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-green-500"/> Comparativa de Ventas</h3>
                       <div className="flex items-end justify-around flex-1 h-40 pb-2">{dashboardStats.salesComparison.map((item, idx) => (<div key={idx} className="flex flex-col items-center gap-2 group w-1/3"><div className="text-xs font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">$ {item.value.toLocaleString()}</div><div className={`w-12 rounded-t-xl transition-all duration-500 hover:opacity-80 ${item.color}`} style={{ height: `${(item.value / (Math.max(...dashboardStats.salesComparison.map(i=>i.value)) || 1)) * 100}%` }}></div><span className="text-xs font-medium text-slate-500">{item.label}</span></div>))}</div>
                   </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Star size={18} className="text-yellow-400"/> Servicios Top</h3>
-                      <div className="space-y-4">{dashboardStats.topServices.map((svc, i) => (<div key={i} className="flex items-center gap-3"><div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold">{i+1}</div><div className="flex-1"><div className="flex justify-between text-xs mb-1"><span className="font-medium text-slate-700">{svc.name}</span><span className="text-slate-400">{svc.count}</span></div><div className="w-full bg-slate-50 rounded-full h-1.5"><div className="bg-yellow-400 h-1.5 rounded-full" style={{ width: `${(svc.count / (dashboardStats.topServices[0].count || 1)) * 100}%` }}></div></div></div></div>))}</div>
-                    </div>
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Clock size={18} className="text-purple-500"/> Horas Pico</h3>
-                      <div className="flex items-end gap-1 h-32 overflow-x-auto pb-2">{dashboardStats.busyHours.map((h, i) => (<div key={i} className="flex flex-col items-center flex-1 min-w-[30px]"><div className="w-full bg-purple-100 rounded-t hover:bg-purple-200 transition-colors relative group" style={{ height: `${(h.count / (Math.max(...dashboardStats.busyHours.map(x=>x.count)) || 1)) * 100}%` }}><div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-1 rounded opacity-0 group-hover:opacity-100">{h.count}</div></div><span className="text-[10px] text-slate-400 mt-1">{h.hour.split(':')[0]}</span></div>))}</div>
-                    </div>
               </div>
             </div>
           )}
@@ -799,13 +724,7 @@ export default function App() {
                                 </div>
                                 <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.stock > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{item.stock > 0 ? 'Disponible' : 'Agotado'}</span>
-                                    <button 
-                                      type="button"
-                                      onClick={(e) => { e.preventDefault(); handleDeleteProduct(item.id); }} 
-                                      className="text-slate-400 hover:text-red-500 p-2 transition"
-                                    >
-                                      <Trash2 size={18}/>
-                                    </button>
+                                    <button onClick={(e) => { e.preventDefault(); handleDeleteProduct(item.id); }} className="text-slate-400 hover:text-red-500 p-2 transition"><Trash2 size={18}/></button>
                                 </div>
                             </div>
                         ))}
@@ -890,11 +809,11 @@ export default function App() {
                             <span className="font-bold text-slate-500 text-xs uppercase">Horario:</span>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs">De</span>
-                                <input type="time" value={staff.schedule?.start || "09:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, start: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
+                                <input type="time" value={staff.schedule?.start || "09:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||DEFAULT_SCHEDULE), start: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
                             </div>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs">A</span>
-                                <input type="time" value={staff.schedule?.end || "18:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, end: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
+                                <input type="time" value={staff.schedule?.end || "18:00"} onChange={(e) => handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||DEFAULT_SCHEDULE), end: e.target.value})} className="border rounded px-1 text-xs bg-white"/>
                             </div>
                             <div className="flex gap-1">
                                 {[1,2,3,4,5,6,0].map(d => (
@@ -903,7 +822,7 @@ export default function App() {
                                         onClick={() => {
                                             const days = staff.schedule?.days || [];
                                             const newDays = days.includes(d) ? days.filter(day => day !== d) : [...days, d];
-                                            handleUpdateStaff(staff.id, 'schedule', {...staff.schedule, days: newDays});
+                                            handleUpdateStaff(staff.id, 'schedule', {...(staff.schedule||DEFAULT_SCHEDULE), days: newDays});
                                         }}
                                         className={`w-6 h-6 text-[10px] rounded flex items-center justify-center font-bold ${staff.schedule?.days?.includes(d) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}
                                     >
